@@ -42,6 +42,7 @@
       };
       devShells.${system}.default = pkgs.mkShell {
         inherit buildInputs;
+        name = "dmm-dev";
         nativeBuildInputs = [
           pkgs.rust-analyzer-unwrapped
           pkgs.nodePackages.vscode-langservers-extracted
