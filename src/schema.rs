@@ -1,23 +1,205 @@
-use std::{io::Write, path::Path, process::Command};
+use std::{collections::HashMap, path::Path, process::Command};
 
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct DlPlaylist {
     pub name: String,
     pub sources: Vec<Source>,
     pub tracks: Vec<DlTrack>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
+impl DlPlaylist {
+    pub fn find_source(&self, name: &str) -> Option<&Source> {
+        self.sources.iter().find(|x| x.name == name)
+    }
+
+    pub fn gen_diff(&self, other: &Playlist) -> DlPlaylistDiff {
+        let mut diff = DlPlaylistDiff { changes: vec![] };
+        if self.name != other.name {
+            diff.changes.push(DiffChange::Name {
+                old: self.name.clone(),
+                new: other.name.clone(),
+            });
+        }
+        let mut source_map: HashMap<String, Source> = HashMap::new();
+        for source in self.sources.clone() {
+            source_map.insert(source.name.clone(), source);
+        }
+        for source in other.sources.clone() {
+            if let Some(old) = source_map.remove(&source.name) {
+                if source.format != old.format {
+                    diff.changes.push(DiffChange::SourceChangeFormat {
+                        name: source.name.clone(),
+                        old: old.format.clone(),
+                        new: source.format.clone(),
+                    })
+                }
+                match (old.kind, source.kind) {
+                    // if these are not matching, then emit DiffChange::SourceReplaceKind
+                    (old @ SourceKind::Shell { .. }, new @ SourceKind::Shell { .. }) => {
+                        diff.changes.push(DiffChange::SourceModifyKind {
+                            name: source.name.clone(),
+                            old,
+                            new,
+                        });
+                    }
+                }
+            } else {
+                diff.changes.push(DiffChange::AddSource { new: source });
+            }
+        }
+        for source in source_map.into_values() {
+            diff.changes.push(DiffChange::DelSource { removed: source });
+        }
+        let mut source_map: HashMap<SourceKind, String> = HashMap::new();
+        for source in self.sources.clone() {
+            source_map.insert(source.kind, source.name);
+        }
+        for source in other.sources.clone() {
+            if let Some(old) = source_map.remove(&source.kind) {
+                if old != source.name {
+                    diff.changes.push(DiffChange::SourceChangeName {
+                        old,
+                        new: source.name,
+                    })
+                }
+            }
+        }
+        todo!("Track")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct DlPlaylistDiff {
+    pub changes: Vec<DiffChange>,
+}
+
+impl DlPlaylistDiff {
+    pub fn display(&self) {
+        println!(" --- playlist diff --- ");
+        for change in &self.changes {
+            use DiffChange::*;
+            match change.clone() {
+                Name { old, new } => println!(" M [playlist/name]\t {old} -> {new}"),
+                AddSource { new } => println!(
+                    " + [source]\t {name} | output: {format} | kind: {variant}",
+                    name = new.name,
+                    format = new.format,
+                    variant = match new.kind {
+                        SourceKind::Shell { .. } => "shell",
+                    }
+                ),
+                DelSource { removed } => println!(" - [source]\t {name}", name = removed.name),
+                SourceChangeName { old, new } => println!(" M [source/name]\t {old} -> {new}"),
+                SourceChangeFormat { name, old, new } => {
+                    println!(" M [source/format]\t of source {name}: {old} -> {new}")
+                }
+                SourceReplaceKind { name, old, new } => {
+                    println!(
+                        " M [source/kind]\t of source {name}: {old} -> {new}",
+                        old = match old {
+                            SourceKind::Shell { .. } => "shell",
+                        },
+                        new = match new {
+                            SourceKind::Shell { .. } => "shell",
+                        }
+                    )
+                }
+                SourceModifyKind { name, old, new } => match (old, new) {
+                    (
+                        SourceKind::Shell {
+                            cmd: old_cmd,
+                            args: old_args,
+                        },
+                        SourceKind::Shell { cmd, args },
+                    ) => {
+                        if old_cmd != cmd && old_args != args {
+                            println!(" M [source/kind/all]\t of source {name}:\n    M [cmd]\t {old_cmd} -> {cmd}\n    M [args]\t {old_args:?} -> {args:?}")
+                        } else if old_cmd != cmd {
+                            println!(" M [source/kind/-cmd]\t of source {name}: {old_cmd} -> {cmd}")
+                        } else if old_args != args {
+                            println!(" M [source/kind/-args]\t of source {name}: {old_args:?} -> {args:?}")
+                        }
+                    }
+                },
+                AddTrack { new } => println!(
+                    " + [track]\t '{name}' by {artist}",
+                    name = new.meta.name,
+                    artist = new.meta.artist
+                ),
+                DelTrack { removed } => println!(
+                    " + [track]\t '{name}' by {artist}",
+                    name = removed.meta.name,
+                    artist = removed.meta.artist
+                ),
+                TrackLikelyChangedMeta { old, new } => println!(" M [track/rename]\n    M [track/rename/name]\t {} -> {}\n    M [track/rename/artist]\t {} -> {}", old.meta.name, new.meta.name, old.meta.artist, new.meta.artist),
+                TrackChangedSource { old, new } => println!(" M [track/source]\t track '{name}' by {artist}: {} with {:?} -> {} with {:?}",  old.src, old.input, new.src, new.input, name=old.meta.name, artist=old.meta.artist,),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum DiffChange {
+    Name {
+        old: String,
+        new: String,
+    },
+    AddSource {
+        new: Source,
+    },
+    DelSource {
+        removed: Source,
+    },
+    SourceChangeName {
+        old: String,
+        new: String,
+    },
+    SourceChangeFormat {
+        name: String,
+        old: String,
+        new: String,
+    },
+    SourceReplaceKind {
+        name: String,
+        old: SourceKind,
+        new: SourceKind,
+    },
+    /// modification to the *content* of SourceKind (variant is the same)
+    SourceModifyKind {
+        name: String,
+        old: SourceKind,
+        new: SourceKind,
+    },
+    AddTrack {
+        new: Track,
+    },
+    DelTrack {
+        removed: Track,
+    },
+    /// the metadata of a track (name or author) changed, but the `src` and `input` did not.
+    /// this likely means that the track was re-named
+    TrackLikelyChangedMeta {
+        old: Track,
+        new: Track,
+    },
+    /// the metadata of a track (name/author) is the same, but the `src` and/or `input` changed.
+    TrackChangedSource {
+        old: Track,
+        new: Track,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct DlTrack {
     pub track: Track,
     pub track_id: Uuid,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Playlist {
     pub name: String,
     pub sources: Vec<Source>,
@@ -30,7 +212,7 @@ impl Playlist {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Source {
     pub name: String,
     pub format: String,
@@ -73,19 +255,19 @@ impl Source {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum SourceKind {
     Shell { cmd: String, args: Vec<String> },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Track {
     pub meta: Meta,
     pub src: String,
     pub input: ron::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Meta {
     pub name: String,
     pub artist: String,

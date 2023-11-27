@@ -28,9 +28,9 @@
       # cf. https://crane.dev/API.html#libcleancargosource
       src = craneLib.cleanCargoSource ./.;
       # compile-time
-      nativeBuildInputs = with pkgs; [ rustToolchain pkg-config yt-dlp ];
+      nativeBuildInputs = with pkgs; [ rustToolchain pkg-config yt-dlp alsa-lib ];
       # runtime
-      buildInputs = with pkgs; [ yt-dlp ]; # needed system libraries
+      buildInputs = with pkgs; [ yt-dlp alsa-lib ]; # needed system libraries
       cargoArtifacts = craneLib.buildDepsOnly { inherit src buildInputs nativeBuildInputs; };
       bin = craneLib.buildPackage ({ inherit src buildInputs nativeBuildInputs cargoArtifacts; });
     in
