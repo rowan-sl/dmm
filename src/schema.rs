@@ -12,6 +12,7 @@ pub struct DlPlaylist {
 }
 
 impl DlPlaylist {
+    #[allow(dead_code)]
     pub fn find_source(&self, name: &str) -> Option<&Source> {
         self.sources.iter().find(|x| x.name == name)
     }
