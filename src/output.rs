@@ -5,8 +5,11 @@ use symphonia::core::conv::{ConvertibleSample, IntoSample};
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 
+use crate::waker::Waker;
+
+#[async_trait::async_trait(?Send)]
 pub trait AudioOutput {
-    fn write(&mut self, decoded: AudioBufferRef<'_>) -> Result<()>;
+    async fn write(&mut self, decoded: AudioBufferRef<'_>) -> Result<()>;
     /// attempt to pause the output stream at the hardware level.
     /// this may not be supported, but if it isn't, the data callback will simply produce silent audio
     fn hint_pause(&mut self);
@@ -38,6 +41,7 @@ where
     ring_buf_producer: rb::Producer<T>,
     sample_buf: SampleBuffer<T>,
     stream: cpal::Stream,
+    waker: Waker,
 }
 
 impl<T: AudioOutputSample> CpalAudioOutputImpl<T> {
@@ -57,6 +61,9 @@ impl<T: AudioOutputSample> CpalAudioOutputImpl<T> {
         let ring_buf = SpscRb::new(ring_len);
         let (ring_buf_producer, ring_buf_consumer) = (ring_buf.producer(), ring_buf.consumer());
 
+        let waker = Waker::new();
+        let waker_clone = waker.clone();
+
         let stream_result = device.build_output_stream(
             &config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
@@ -66,6 +73,9 @@ impl<T: AudioOutputSample> CpalAudioOutputImpl<T> {
 
                 // Mute any remaining samples.
                 data[written..].iter_mut().for_each(|s| *s = T::MID);
+
+                // wake producer task, tell it to send more samples
+                waker_clone.wake();
             },
             move |err| error!("audio output error: {}", err),
             None,
@@ -90,12 +100,14 @@ impl<T: AudioOutputSample> CpalAudioOutputImpl<T> {
             ring_buf_producer,
             sample_buf,
             stream,
+            waker,
         }))
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl<T: AudioOutputSample> AudioOutput for CpalAudioOutputImpl<T> {
-    fn write(&mut self, decoded: AudioBufferRef<'_>) -> Result<()> {
+    async fn write(&mut self, decoded: AudioBufferRef<'_>) -> Result<()> {
         // Do nothing if there are no audio frames.
         if decoded.frames() == 0 {
             return Ok(());
@@ -110,8 +122,20 @@ impl<T: AudioOutputSample> AudioOutput for CpalAudioOutputImpl<T> {
         let mut samples = self.sample_buf.samples();
 
         // Write all samples to the ring buffer.
-        while let Some(written) = self.ring_buf_producer.write_blocking(samples) {
-            samples = &samples[written..];
+        // while let Some(written) = self.ring_buf_producer.write_blocking(samples) {
+        //     samples = &samples[written..];
+        // }
+        loop {
+            match self.ring_buf_producer.write(samples) {
+                Ok(written) => {
+                    samples = &samples[written..];
+                    if samples.len() == 0 {
+                        break;
+                    }
+                }
+                Err(rb::RbError::Full) => (&mut self.waker).await,
+                Err(..) => unreachable!(),
+            }
         }
 
         Ok(())

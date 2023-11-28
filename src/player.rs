@@ -133,13 +133,13 @@ impl<'a> DecodeAndPlay<'a> {
                         };
                         audio_output.replace(output);
                         if let Some(audio_output) = audio_output.as_mut() {
-                            audio_output.write(decoded).unwrap();
+                            audio_output.write(decoded).await.unwrap();
                             audio_output.hint_play();
                         }
                     } else {
                         // TODO: Check the audio spec. and duration hasn't changed.
                         if let Some(audio_output) = audio_output.as_mut() {
-                            audio_output.write(decoded).unwrap()
+                            audio_output.write(decoded).await.unwrap()
                         }
                     }
                 }

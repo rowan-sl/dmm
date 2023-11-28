@@ -16,6 +16,7 @@ use crate::schema::DlPlaylist;
 mod output;
 mod player;
 mod schema;
+mod waker;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
