@@ -5,10 +5,9 @@ use std::{env, fs, path::PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
-use cpal::traits::HostTrait;
+use cpal::traits::{DeviceTrait, HostTrait};
 use heck::ToSnakeCase;
 use notify_rust::Notification;
-use rodio::DeviceTrait;
 use symphonia::core::{
     codecs::{DecoderOptions, CODEC_TYPE_NULL},
     errors::Error as AudioError,
