@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use cpal::{Device, SupportedStreamConfig};
+use flume::{Receiver, Sender};
 use symphonia::core::{
     codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL},
     errors::Error as AudioError,
@@ -9,7 +10,14 @@ use symphonia::core::{
     probe::Hint,
 };
 
-use crate::output;
+use crate::output::{self, AudioOutput};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Command {
+    Pause,
+    Play,
+    Stop,
+}
 
 pub struct DecodeAndPlay<'a> {
     format: Box<dyn FormatReader>,
@@ -17,6 +25,8 @@ pub struct DecodeAndPlay<'a> {
     track_id: u32,
     device: &'a Device,
     config: &'a SupportedStreamConfig,
+    command_queue: Receiver<Command>,
+    command_queue_sender: Sender<Command>,
 }
 
 impl<'a> DecodeAndPlay<'a> {
@@ -55,19 +65,50 @@ impl<'a> DecodeAndPlay<'a> {
 
         // Store the track identifier, it will be used to filter packets.
         let track_id = track.id;
+
+        let (command_queue_sender, command_queue) = flume::bounded(1);
         Self {
             format,
             decoder,
             track_id,
             device,
             config,
+            command_queue,
+            command_queue_sender,
         }
     }
 
+    pub fn get_command_queue(&self) -> Sender<Command> {
+        self.command_queue_sender.clone()
+    }
+
     pub async fn run(&mut self) -> Result<()> {
-        let mut audio_output = None;
+        let mut audio_output = None::<Box<dyn AudioOutput>>;
         // The decode loop.
         loop {
+            if let Ok(cmd) = self.command_queue.try_recv() {
+                match cmd {
+                    Command::Pause => {
+                        audio_output.as_mut().map(|out| out.hint_pause());
+                        let cmd = self.command_queue.recv_async().await?;
+                        match cmd {
+                            Command::Pause => { /* already paused */ }
+                            Command::Play => {
+                                audio_output.as_mut().map(|out| out.hint_play());
+                            }
+                            Command::Stop => {
+                                audio_output.take().map(|mut out| out.flush());
+                                return Ok(());
+                            }
+                        }
+                    }
+                    Command::Play => { /* already playing */ }
+                    Command::Stop => {
+                        audio_output.take().map(|mut out| out.flush());
+                        return Ok(());
+                    }
+                }
+            }
             // Get the next packet from the media format.
             let packet = match self.format.next_packet() {
                 Ok(packet) => packet,

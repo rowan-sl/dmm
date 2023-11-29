@@ -1,7 +1,14 @@
 #[macro_use]
 extern crate log;
 
-use std::{env, fs, path::PathBuf};
+use std::{
+    env, fs,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, AtomicI8},
+        Arc,
+    },
+};
 
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
@@ -9,6 +16,10 @@ use cpal::traits::{DeviceTrait, HostTrait};
 use heck::ToSnakeCase;
 use notify_rust::Notification;
 use symphonia::core::{io::MediaSourceStream, probe::Hint};
+use tokio::{
+    io::{self, AsyncBufReadExt},
+    spawn,
+};
 use uuid::Uuid;
 
 use crate::schema::DlPlaylist;
@@ -83,11 +94,15 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
         }
     };
 
-    for track in &dl_pl.tracks {
+    let mut selected_track = 0;
+    loop {
+        let track = dl_pl.tracks.get(selected_track).unwrap();
         info!(
-            "Playing: {name} by {artist}",
+            "Playing [{track}/{num_tracks}]: {name} by {artist}",
+            track = selected_track + 1,
+            num_tracks = dl_pl.tracks.len(),
             name = track.track.meta.name,
-            artist = track.track.meta.artist
+            artist = track.track.meta.artist,
         );
         let _handle = Notification::new()
             .summary("DMM [play]")
@@ -122,7 +137,95 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
         hint.with_extension(&dl_pl.find_source(&track.track.src).unwrap().format);
 
         let mut player = player::DecodeAndPlay::open(&device, &config, mss, hint);
+        let queue = player.get_command_queue();
+        let exit_flag = Arc::new(AtomicBool::new(false));
+        let exit_flag2 = exit_flag.clone();
+        let order_flag = Arc::new(AtomicI8::new(1));
+        let order_flag2 = order_flag.clone();
+        let cmd_task = spawn(async move {
+            let mut input = io::BufReader::new(io::stdin()).lines();
+            while let Some(line) = input.next_line().await? {
+                match line.as_str() {
+                    "pause" => {
+                        queue.send(player::Command::Pause)?;
+                        info!("[command] pause")
+                    }
+                    "play" => {
+                        queue.send(player::Command::Play)?;
+                        info!("[command] play");
+                    }
+                    "stop" | "quit" => {
+                        exit_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
+                        queue.send(player::Command::Stop)?;
+                        info!("[command] stop|quit");
+                        break;
+                    }
+                    "next" | "ff" => {
+                        order_flag2.store(2, std::sync::atomic::Ordering::Relaxed);
+                        queue.send(player::Command::Stop)?;
+                        info!("[command] next|ff");
+                        break;
+                    }
+                    "prev" | "fr" => {
+                        order_flag2.store(-1, std::sync::atomic::Ordering::Relaxed);
+                        queue.send(player::Command::Stop)?;
+                        info!("[command] prev|fr");
+                        break;
+                    }
+                    "repeat" | "re" => {
+                        order_flag2.store(0, std::sync::atomic::Ordering::Relaxed);
+                        queue.send(player::Command::Stop)?;
+                        info!("[command] repeat|re");
+                        break;
+                    }
+                    "help" | "h" => {
+                        info!(
+                            "-- help --\n\t\
+                            commands:\n\t\
+                             - pause\n\t\
+                             - play\n\t\
+                             - stop   | quit : exit DMM\n\t\
+                             - next   | ff   : go to the next track in the playlist\n\t\
+                             - prev   | fr   : go to the previous track in the playlist\n\t\
+                             - repeat | re   : repeat the current track"
+                        );
+                    }
+                    _ => warn!("Unknown command {line:?}"),
+                }
+            }
+            anyhow::Ok(())
+        });
         player.run().await?;
+        cmd_task.abort();
+        if exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            info!("[command] exiting");
+            break;
+        }
+        match order_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            -1 => {
+                if selected_track == 0 {
+                    warn!("[command/prev] no track before this one exists -> repeating");
+                } else {
+                    selected_track -= 1;
+                }
+            }
+            0 => {
+                continue;
+            }
+            v @ (1 | 2) => {
+                if selected_track == dl_pl.tracks.len() - 1 {
+                    if v != 1 {
+                        error!("[command/next] no track after this one -> repeating");
+                    } else {
+                        info!("end of playlist, exiting");
+                        break;
+                    }
+                } else {
+                    selected_track += 1;
+                }
+            }
+            _ => unreachable!(),
+        }
     }
     Ok(())
 }
