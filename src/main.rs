@@ -2,10 +2,12 @@
 extern crate log;
 
 use std::{
-    env, fs,
+    env,
+    fmt::Write,
+    fs,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicI8},
+        atomic::{AtomicBool, AtomicI8, AtomicUsize},
         Arc,
     },
 };
@@ -142,6 +144,9 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
         let exit_flag2 = exit_flag.clone();
         let order_flag = Arc::new(AtomicI8::new(1));
         let order_flag2 = order_flag.clone();
+        let track_select = Arc::new(AtomicUsize::new(usize::MAX));
+        let track_select2 = track_select.clone();
+        let tracks_listing = dl_pl.tracks.clone();
         let cmd_task = spawn(async move {
             let mut input = io::BufReader::new(io::stdin()).lines();
             while let Some(line) = input.next_line().await? {
@@ -178,6 +183,39 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
                         info!("[command] repeat|re");
                         break;
                     }
+                    "list" | "ls" => {
+                        let mut output = String::new();
+                        for (i, track) in tracks_listing.iter().enumerate() {
+                            let _ = writeln!(
+                                &mut output,
+                                " - {num}\t: {name} by {artist}",
+                                num = i + 1,
+                                name = track.track.meta.name,
+                                artist = track.track.meta.artist
+                            );
+                        }
+                        info!("-- track listing --\n{output}");
+                    }
+                    "select" | "sel" => {
+                        info!("[command/select] enter track to play:");
+                        if let Some(track) = input.next_line().await? {
+                            if let Ok(val) = track.trim().parse::<usize>() {
+                                if val <= tracks_listing.len() {
+                                    info!("[command/select] jump to track {val}");
+                                    track_select2
+                                        .store(val - 1, std::sync::atomic::Ordering::Relaxed);
+                                    queue.send(player::Command::Stop)?;
+                                    break;
+                                } else {
+                                    warn!("Track {val} is out of range");
+                                }
+                            } else {
+                                warn!("Invalid track {track:?}");
+                            }
+                        } else {
+                            break;
+                        }
+                    }
                     "help" | "h" => {
                         info!(
                             "-- help --\n\t\
@@ -187,7 +225,9 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
                              - stop   | quit : exit DMM\n\t\
                              - next   | ff   : go to the next track in the playlist\n\t\
                              - prev   | fr   : go to the previous track in the playlist\n\t\
-                             - repeat | re   : repeat the current track"
+                             - repeat | re   : repeat the current track\n\t
+                             - list   | ls   : list all tracks in the current playlist\n\t
+                             - select | sel  : select a track by its number"
                         );
                     }
                     _ => warn!("Unknown command {line:?}"),
@@ -225,6 +265,12 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
                 }
             }
             _ => unreachable!(),
+        }
+        match track_select.load(std::sync::atomic::Ordering::Relaxed) {
+            usize::MAX => {}
+            selected => {
+                selected_track = selected;
+            }
         }
     }
     Ok(())
