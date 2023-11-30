@@ -27,6 +27,7 @@ futures = "0.3.29"
 async-trait = "0.1.74"
 ratatui = { version = "0.24.0", features = ["all-widgets"] }
 flume = "0.11.0"
+fuzzy-matcher = "0.3.7"
 
 [profile.release]
 lto = true

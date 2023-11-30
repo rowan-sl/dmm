@@ -15,6 +15,7 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use cpal::traits::{DeviceTrait, HostTrait};
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use heck::ToSnakeCase;
 use notify_rust::Notification;
 use symphonia::core::{io::MediaSourceStream, probe::Hint};
@@ -216,6 +217,39 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
                             break;
                         }
                     }
+                    "search" | "sea" => {
+                        info!("[command/search] enter (partial) name of track:");
+                        if let Some(name) = input.next_line().await? {
+                            let matcher = SkimMatcherV2::default().ignore_case();
+                            let mut scores = vec![];
+                            for (i, track) in tracks_listing.iter().enumerate() {
+                                if let Some(score) =
+                                    matcher.fuzzy_match(&track.track.meta.name, &name)
+                                {
+                                    scores.push((score, i));
+                                }
+                            }
+                            if scores.is_empty() {
+                                warn!("[command/search] no results");
+                            } else {
+                                scores.sort_by_key(|score| score.0);
+                                let mut output = String::new();
+                                for (i, (_score, track)) in scores.into_iter().enumerate() {
+                                    let track = tracks_listing.get(track).unwrap();
+                                    let _ = writeln!(
+                                        &mut output,
+                                        " - {}\t: {} by {}",
+                                        i + 1,
+                                        track.track.meta.name,
+                                        track.track.meta.artist,
+                                    );
+                                }
+                                info!("--- search ---\n{output}");
+                            }
+                        } else {
+                            break;
+                        }
+                    }
                     "help" | "h" => {
                         info!(
                             "-- help --\n\t\
@@ -225,9 +259,10 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
                              - stop   | quit : exit DMM\n\t\
                              - next   | ff   : go to the next track in the playlist\n\t\
                              - prev   | fr   : go to the previous track in the playlist\n\t\
-                             - repeat | re   : repeat the current track\n\t
-                             - list   | ls   : list all tracks in the current playlist\n\t
-                             - select | sel  : select a track by its number"
+                             - repeat | re   : repeat the current track\n\t\
+                             - list   | ls   : list all tracks in the current playlist\n\t\
+                             - select | sel  : select a track by its number\n\t\
+                             - search | sea  : search the playlist for a track"
                         );
                     }
                     _ => warn!("Unknown command {line:?}"),
