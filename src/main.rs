@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
 use std::{
     env,
@@ -12,8 +12,8 @@ use std::{
     },
 };
 
-use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
+use color_eyre::eyre::{anyhow, bail, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use heck::ToSnakeCase;
@@ -27,9 +27,19 @@ use uuid::Uuid;
 
 use crate::schema::DlPlaylist;
 
+mod action;
+mod app;
+mod cfg;
+mod components;
+mod log;
+mod mode;
 mod output;
+mod panic;
 mod player;
+mod project_meta;
 mod schema;
+mod symbol;
+mod tui;
 mod waker;
 
 #[derive(Parser, Debug)]
@@ -53,20 +63,19 @@ enum Command {
         #[arg()]
         playlist: PathBuf,
     },
+    UI {},
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    log::initialize_logging()?;
+    panic::initialize_panic_handler()?;
     let args = Args::parse();
-    pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Trace)
-        .filter_module("symphonia_core::probe", log::LevelFilter::Warn)
-        .filter_module("async_io", log::LevelFilter::Warn)
-        .filter_module("polling", log::LevelFilter::Warn)
-        .try_init()?;
+    let mut app = app::App::new(1.0, 60.0)?;
     match args.cmd {
         Command::Download { file } => download(file)?,
         Command::Play { playlist } => play(playlist).await?,
+        Command::UI {} => app.run().await?,
     }
     Ok(())
 }
@@ -268,7 +277,7 @@ async fn play(pl_dir: PathBuf) -> Result<()> {
                     _ => warn!("Unknown command {line:?}"),
                 }
             }
-            anyhow::Ok(())
+            Ok::<(), color_eyre::eyre::Error>(())
         });
         player.run().await?;
         cmd_task.abort();

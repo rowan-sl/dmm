@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use color_eyre::eyre::{bail, Result};
 use rb::{RbConsumer, RbProducer, SpscRb, RB};
 use symphonia::core::audio::{AudioBufferRef, RawSample, SampleBuffer, SignalSpec};
 use symphonia::core::conv::{ConvertibleSample, IntoSample};

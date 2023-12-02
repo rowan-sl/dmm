@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path, process::Command};
 
-use anyhow::{anyhow, bail, Result};
+use color_eyre::eyre::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -203,6 +203,7 @@ pub struct DlTrack {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Playlist {
     pub name: String,
+    pub import: Vec<Import>,
     pub sources: Vec<Source>,
     pub tracks: Vec<Track>,
 }
@@ -211,6 +212,11 @@ impl Playlist {
     pub fn find_source(&self, name: &str) -> Option<&Source> {
         self.sources.iter().find(|x| x.name == name)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum Import {
+    Source(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

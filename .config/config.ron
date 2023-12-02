@@ -1,0 +1,9 @@
+Config(
+  keybinds: {
+    Home: {
+      "<q>": Quit,
+      "<Ctrl-c>": Quit,
+      "<esc>": Quit,
+    },
+  }
+)

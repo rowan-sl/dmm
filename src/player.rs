@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use color_eyre::eyre::{bail, Result};
 use cpal::{Device, SupportedStreamConfig};
 use flume::{Receiver, Sender};
 use symphonia::core::{
