@@ -5,7 +5,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
 use serde::{de::Deserializer, Deserialize};
 
-use crate::{action::Action, mode::Mode, project_meta::get_config_dir};
+use crate::{
+    project_meta::get_config_dir,
+    ui::{action::Action, mode::Mode},
+};
 
 const CONFIG: &str = include_str!("../.config/config.ron");
 

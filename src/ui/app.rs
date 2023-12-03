@@ -3,13 +3,13 @@ use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
 use tokio::sync::mpsc;
 
-use crate::{
+use super::{
     action::Action,
-    cfg::Config,
     components::{fps::FpsCounter, home::Home, Component},
     mode::Mode,
     tui,
 };
+use crate::cfg::Config;
 
 pub struct App {
     pub tick_rate: f64,
@@ -44,7 +44,7 @@ impl App {
         let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
         let mut tui = tui::Tui::new()?
-            .mouse(false)
+            .mouse(true)
             .paste(true)
             .tick_rate(self.tick_rate)
             .frame_rate(self.frame_rate);

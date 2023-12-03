@@ -4,7 +4,7 @@ use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
 
 use super::Component;
-use crate::{action::Action, tui::Frame};
+use crate::ui::{action::Action, tui::Frame};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FpsCounter {

@@ -1,12 +1,11 @@
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
-use ratatui::layout::Rect;
+use ratatui::{layout::Rect, Frame};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    action::Action,
     cfg::Config,
-    tui::{Event, Frame},
+    ui::{action::Action, tui::Event},
 };
 
 pub mod fps;
