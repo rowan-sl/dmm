@@ -278,12 +278,8 @@ pub struct SingleTrackPlayer {
 }
 
 impl SingleTrackPlayer {
-    pub async fn new(
-        config: Arc<SupportedStreamConfig>,
-        device: Arc<cpal::Device>,
-    ) -> Result<Self> {
+    pub fn new(config: Arc<SupportedStreamConfig>, device: Arc<cpal::Device>) -> Result<Self> {
         let (tx, rx) = flume::unbounded::<PlayTaskCmd>();
-        tx.send(PlayTaskCmd::Pause).unwrap();
 
         let handle = thread::Builder::new()
             .name("audio-decode".to_string())
