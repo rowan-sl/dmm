@@ -190,15 +190,12 @@ impl Component for Home {
         .fg(Color::Gray);
         f.render_widget(titlebar_content, titlebar_content_area);
 
-        let content_area = main_layout[1];
-        let content = Block::new()
-            .title("Playlist".bold())
-            .border_style(Style::new().fg(Color::Yellow))
-            .borders(Borders::ALL);
-        let content_inner_area = content.inner(content_area);
-        f.render_widget(content, content_area);
+        let content_layout = Layout::new()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(0), Constraint::Min(0)])
+            .split(main_layout[1]);
 
-        let content_inner = Paragraph::new(vec![
+        let playlist = Paragraph::new(vec![
             Line::from(self.playlist.name.clone().italic()),
             Line::from(vec![
                 self.playlist.tracks.len().to_string().bold(),
@@ -208,8 +205,41 @@ impl Component for Home {
                 self.playlist.sources.len().to_string().bold(),
                 " source(s)".into(),
             ]),
-        ]);
-        f.render_widget(content_inner, content_inner_area);
+        ])
+        .block(
+            Block::new()
+                .title("Playlist".bold())
+                .border_style(Style::new().fg(Color::Yellow))
+                .borders(Borders::ALL),
+        );
+        f.render_widget(playlist, content_layout[0]);
+
+        let track = Paragraph::new(vec![
+            Line::from(
+                self.playlist.tracks[self.c_track_idx]
+                    .track
+                    .meta
+                    .name
+                    .clone()
+                    .italic(),
+            ),
+            Line::from(vec![
+                "by: ".into(),
+                self.playlist.tracks[self.c_track_idx]
+                    .track
+                    .meta
+                    .artist
+                    .clone()
+                    .bold(),
+            ]),
+        ])
+        .block(
+            Block::new()
+                .title("Track".bold())
+                .border_style(Style::new().fg(Color::Yellow))
+                .borders(Borders::ALL),
+        );
+        f.render_widget(track, content_layout[1]);
 
         Ok(())
     }
