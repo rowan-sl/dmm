@@ -21,8 +21,6 @@ use symphonia::core::{
     probe,
 };
 
-use crate::waker::Waker;
-
 pub trait AudioOutputSample:
     cpal::Sample
     + cpal::SizedSample
@@ -46,7 +44,6 @@ trait IsAudioWriter {
 struct AudioWriterImpl<T: AudioOutputSample> {
     ring_buf_producer: rb::Producer<T>,
     sample_buf: SampleBuffer<T>,
-    written: usize,
 }
 
 impl<T: AudioOutputSample> IsAudioWriter for AudioWriterImpl<T> {
@@ -63,20 +60,10 @@ impl<T: AudioOutputSample> IsAudioWriter for AudioWriterImpl<T> {
         }
         self.sample_buf.copy_interleaved_ref(decoded);
 
-        let samples = self.sample_buf.samples();
+        let mut samples = self.sample_buf.samples();
         // Write enough samples to fill the ring buffer.
-        loop {
-            match self.ring_buf_producer.write(&samples[self.written..]) {
-                Ok(written) => {
-                    self.written += written;
-                    if samples.len() == self.written {
-                        self.written = 0;
-                        break;
-                    }
-                }
-                Err(rb::RbError::Full) => return Ok(()),
-                Err(..) => unreachable!(),
-            }
+        while let Some(written) = self.ring_buf_producer.write_blocking(samples) {
+            samples = &samples[written..];
         }
         Ok(())
     }
@@ -127,7 +114,6 @@ fn open_stream<T: AudioOutputSample>(
         Box::new(AudioWriterImpl {
             ring_buf_producer,
             sample_buf,
-            written: 0,
         }),
         stream,
     ))
@@ -440,6 +426,7 @@ impl SingleTrackPlayer {
             track_src,
             filetype,
         })?;
+        self.state = State::Stopped;
         Ok(())
     }
 
@@ -452,6 +439,7 @@ impl SingleTrackPlayer {
     pub fn pause(&mut self) -> Result<()> {
         if let State::Playing = self.state {
             self.tx.try_send(PlayTaskCmd::Pause)?;
+            self.state = State::Paused;
         }
         Ok(())
     }
@@ -463,12 +451,14 @@ impl SingleTrackPlayer {
         if let State::Stopped = self.state {
             self.tx.try_send(PlayTaskCmd::Start)?;
         }
+        self.state = State::Playing;
         Ok(())
     }
 
     pub fn stop(&mut self) -> Result<()> {
         if let State::Paused | State::Playing = self.state {
             self.tx.try_send(PlayTaskCmd::Stop)?;
+            self.state = State::Stopped;
         }
         Ok(())
     }
