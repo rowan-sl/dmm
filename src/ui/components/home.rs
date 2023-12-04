@@ -52,7 +52,7 @@ impl Home {
 
         Ok(Self {
             command_tx: None,
-            c_track_idx: 103,
+            c_track_idx: 0,
             playlist: dl_pl,
             playlist_dir: pl_dir,
             player,
@@ -110,6 +110,11 @@ impl Component for Home {
                     self.play_c_track()?;
                 }
             }
+            Action::PausePlay => match self.player.state() {
+                player2::State::Playing => self.player.pause()?,
+                player2::State::Paused => self.player.play()?,
+                player2::State::Stopped => {}
+            },
             _ => {}
         }
         Ok(None)

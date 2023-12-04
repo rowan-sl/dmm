@@ -18,6 +18,7 @@ pub enum Action {
     Help,
     // application
     TrackComplete,
+    PausePlay,
 }
 
 // impl<'de> Deserialize<'de> for Action {

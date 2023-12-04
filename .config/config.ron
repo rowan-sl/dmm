@@ -4,6 +4,7 @@ Config(
       "<q>": Quit,
       "<Ctrl-c>": Quit,
       "<esc>": Quit,
+      "<space>": PausePlay,
     },
   }
 )
