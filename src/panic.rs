@@ -31,8 +31,9 @@ pub fn initialize_panic_handler() -> Result<()> {
 
             let file_path = handle_dump(&meta, panic_info);
             // prints human-panic message
-            print_msg(file_path, &meta)
-                .expect("human-panic: printing error message to console failed");
+            if let Err(e) = print_msg(file_path, &meta) {
+                eprintln!("human-panic: printing error message to console failed: {e:#}");
+            }
             eprintln!("{}", panic_hook.panic_report(panic_info)); // prints color-eyre stack trace to stderr
         }
         let msg = format!("{}", panic_hook.panic_report(panic_info));

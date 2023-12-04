@@ -58,7 +58,11 @@ enum Command {
         #[arg()]
         playlist: PathBuf,
     },
-    UI {},
+    UI {
+        /// Playlist to play
+        #[arg()]
+        playlist: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -66,11 +70,13 @@ async fn main() -> Result<()> {
     log::initialize_logging()?;
     panic::initialize_panic_handler()?;
     let args = Args::parse();
-    let mut app = ui::app::App::new(1.0, 24.0)?;
     match args.cmd {
         Command::Download { file } => download(file)?,
         Command::Play { playlist } => play(playlist).await?,
-        Command::UI {} => app.run().await?,
+        Command::UI { playlist } => {
+            let mut app = ui::app::App::new(1.0, 24.0, playlist)?;
+            app.run().await?;
+        }
     }
     Ok(())
 }

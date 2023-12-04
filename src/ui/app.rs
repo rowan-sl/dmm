@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
@@ -23,8 +25,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(tick_rate: f64, frame_rate: f64) -> Result<Self> {
-        let home = Home::new();
+    pub fn new(tick_rate: f64, frame_rate: f64, pl_dir: PathBuf) -> Result<Self> {
+        let home = Home::new(pl_dir)?;
         let config = Config::new()?;
         let fps = FpsCounter::default();
         let mode = Mode::Home;

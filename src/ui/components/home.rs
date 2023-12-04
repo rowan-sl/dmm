@@ -1,33 +1,82 @@
-use color_eyre::eyre::Result;
+use std::{fs, path::PathBuf, sync::Arc};
+
+use color_eyre::eyre::{anyhow, bail, Result};
+use cpal::traits::{DeviceTrait, HostTrait};
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Component, Frame};
 use crate::{
-    schema::Track,
+    player2::{self, SingleTrackPlayer},
+    schema::{self, DlPlaylist, Track},
     ui::{action::Action, symbol},
 };
 
 pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     // info bar
-    playing: bool,
-    stopped: bool,
-    c_track_number: Option<usize>,
-    c_track: Option<Track>,
-    number_tracks: Option<usize>,
+    c_track_number: usize,
+    c_track: Track,
+    number_tracks: usize,
+    playlist: DlPlaylist,
+    //
+    player: SingleTrackPlayer,
 }
 
 impl Home {
-    pub fn new() -> Self {
-        Self {
-            command_tx: None,
-            playing: false,
-            stopped: true,
-            c_track_number: None,
-            c_track: None,
-            number_tracks: None,
+    pub fn new(pl_dir: PathBuf) -> Result<Self> {
+        info!("Loading playlist {pl_dir:?}");
+        if !pl_dir.try_exists()? {
+            bail!("Failed to load: playlist does not exist (no such directory)");
         }
+        if !pl_dir.join("dl_playlist.ron").try_exists()? {
+            bail!("Failed to load: playlist does not exist (no manifest `dl_playlist.ron` file in given directory)");
+        }
+        let dl_pl_str = fs::read_to_string(pl_dir.join("dl_playlist.ron"))?;
+        let dl_pl = ron::from_str::<schema::DlPlaylist>(&dl_pl_str)?;
+        info!("Loaded playlist {name}", name = dl_pl.name);
+
+        let track = dl_pl.tracks.get(1).unwrap();
+        let track_path = pl_dir
+            .read_dir()?
+            .find(|res| {
+                res.as_ref().is_ok_and(|entry| {
+                    entry
+                        .path()
+                        .file_stem()
+                        .is_some_and(|name| name.to_string_lossy() == track.track_id.to_string())
+                })
+            })
+            .ok_or(anyhow!("BUG: could not file file for downloaded track"))??
+            .path();
+        let track_fmt = dl_pl.find_source(&track.track.src).unwrap().format.clone();
+
+        debug!("Initializing audio backend");
+        let host = cpal::default_host();
+        let Some(device) = host.default_output_device() else {
+            error!("No audio output device exists!");
+            bail!("failed to initialize audio backend");
+        };
+        let config = match device.default_output_config() {
+            Ok(config) => config,
+            Err(err) => {
+                error!("failed to get default audio output device config: {}", err);
+                bail!("failed to initialize audio backend");
+            }
+        };
+        let mut player = SingleTrackPlayer::new(Arc::new(config), Arc::new(device))?;
+
+        player.set_track(fs::File::open(&track_path)?, track_fmt)?;
+        player.play()?;
+
+        Ok(Self {
+            command_tx: None,
+            c_track_number: 2,
+            c_track: track.track.clone(),
+            number_tracks: dl_pl.tracks.len(),
+            playlist: dl_pl,
+            player,
+        })
     }
 }
 
@@ -68,7 +117,7 @@ impl Component for Home {
             Span::styled(
                 symbol::OCTAGON,
                 Style::default()
-                    .fg(if self.stopped {
+                    .fg(if self.player.state() == player2::State::Stopped {
                         Color::LightRed
                     } else {
                         Color::DarkGray
@@ -79,10 +128,10 @@ impl Component for Home {
             Span::styled(
                 symbol::PAUSE,
                 Style::default()
-                    .fg(if self.playing {
-                        Color::DarkGray
-                    } else {
+                    .fg(if self.player.state() == player2::State::Paused {
                         Color::LightRed
+                    } else {
+                        Color::DarkGray
                     })
                     .add_modifier(Modifier::BOLD),
             ),
@@ -90,7 +139,7 @@ impl Component for Home {
             Span::styled(
                 symbol::PLAY,
                 Style::default()
-                    .fg(if self.playing {
+                    .fg(if self.player.state() == player2::State::Playing {
                         Color::LightGreen
                     } else {
                         Color::DarkGray
@@ -101,21 +150,11 @@ impl Component for Home {
             "│".fg(Color::Yellow),
             format!(
                 "track {n}/{num}: ",
-                n = self
-                    .c_track_number
-                    .map(|x| x.to_string())
-                    .unwrap_or_else(|| "?".into()),
-                num = self
-                    .number_tracks
-                    .map(|x| x.to_string())
-                    .unwrap_or_else(|| "?".into())
+                n = self.c_track_number,
+                num = self.number_tracks
             )
             .into(),
-            self.c_track
-                .as_ref()
-                .map(|track| track.meta.name.clone())
-                .unwrap_or_default()
-                .italic(),
+            self.c_track.meta.name.clone().italic(),
         ]))
         .fg(Color::Gray);
         f.render_widget(titlebar_content, titlebar_content_area);
@@ -129,9 +168,15 @@ impl Component for Home {
         f.render_widget(content, content_area);
 
         let content_inner = Paragraph::new(vec![
-            Line::from("Classic Christmas Songs".italic()),
-            Line::from(vec![25.to_string().bold(), " track(s)".into()]),
-            Line::from(vec![1.to_string().bold(), " source(s)".into()]),
+            Line::from(self.playlist.name.clone().italic()),
+            Line::from(vec![
+                self.playlist.tracks.len().to_string().bold(),
+                " track(s)".into(),
+            ]),
+            Line::from(vec![
+                self.playlist.sources.len().to_string().bold(),
+                " source(s)".into(),
+            ]),
         ]);
         f.render_widget(content_inner, content_inner_area);
 
