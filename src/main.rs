@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
         Command::Download { file } => download(file)?,
         Command::Play { playlist } => play(playlist).await?,
         Command::UI { playlist } => {
-            let mut app = ui::app::App::new(1.0, 24.0, playlist)?;
+            let mut app = ui::app::App::new(20.0, 30.0, playlist)?;
             app.run().await?;
         }
     }

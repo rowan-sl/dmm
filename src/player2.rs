@@ -1,4 +1,8 @@
-use std::{fs::File, sync::Arc, thread};
+use std::{
+    fs::File,
+    sync::{atomic::AtomicBool, Arc},
+    thread,
+};
 
 use color_eyre::{
     eyre::{bail, Result},
@@ -260,12 +264,15 @@ enum PlayTaskCmd {
 pub struct SingleTrackPlayer {
     state: State,
     tx: Sender<PlayTaskCmd>,
+    stopped_trigger: Arc<AtomicBool>,
     handle: thread::JoinHandle<Result<()>>,
 }
 
 impl SingleTrackPlayer {
     pub fn new(config: Arc<SupportedStreamConfig>, device: Arc<cpal::Device>) -> Result<Self> {
         let (tx, rx) = flume::unbounded::<PlayTaskCmd>();
+        let stopped_trigger = Arc::new(AtomicBool::new(true));
+        let stopped_trigger2 = stopped_trigger.clone();
 
         let handle = thread::Builder::new()
             .name("audio-decode".to_string())
@@ -294,6 +301,7 @@ impl SingleTrackPlayer {
                         Ok(..) => unreachable!(),
                         Err(flume::RecvError::Disconnected) => break 'run,
                     }
+                    stopped_trigger2.store(false, std::sync::atomic::Ordering::Relaxed);
                     let mut decoder = outer_decoder.take().unwrap();
                     let mut audio_output = None::<(Box<dyn IsAudioWriter>, cpal::Stream)>;
                     'play: loop {
@@ -347,7 +355,7 @@ impl SingleTrackPlayer {
                         }
                         match decoder.decode_next() {
                             // call on_track_complete and clean up audio stream
-                            Ok(Decoded::StreamEnd) => todo!(),
+                            Ok(Decoded::StreamEnd) => break 'play,
                             Ok(Decoded::Retry) => continue,
                             Ok(Decoded::Decoded(buffer)) => {
                                 // If the audio output is not open, try to open it.
@@ -403,6 +411,7 @@ impl SingleTrackPlayer {
                         }
                     }
                     // flush audio stream
+                    stopped_trigger2.store(true, std::sync::atomic::Ordering::Relaxed);
                     if let Some(audio_output) = audio_output.as_mut() {
                         let _ = audio_output.1.pause();
                     }
@@ -416,11 +425,22 @@ impl SingleTrackPlayer {
         Ok(Self {
             state: State::Stopped,
             tx,
+            stopped_trigger,
             handle,
         })
     }
 
+    fn update_state(&mut self) {
+        if self
+            .stopped_trigger
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            self.state = State::Stopped;
+        }
+    }
+
     pub fn set_track(&mut self, track_src: File, filetype: String) -> Result<()> {
+        self.update_state();
         self.stop()?;
         self.tx.try_send(PlayTaskCmd::SetNewSource {
             track_src,
@@ -431,12 +451,14 @@ impl SingleTrackPlayer {
     }
 
     pub fn on_track_complete(&mut self, call: impl Fn() + Send + Sync + 'static) -> Result<()> {
+        self.update_state();
         self.tx
             .try_send(PlayTaskCmd::SetOnTrackComplete(Box::new(call)))?;
         Ok(())
     }
 
     pub fn pause(&mut self) -> Result<()> {
+        self.update_state();
         if let State::Playing = self.state {
             self.tx.try_send(PlayTaskCmd::Pause)?;
             self.state = State::Paused;
@@ -445,6 +467,7 @@ impl SingleTrackPlayer {
     }
 
     pub fn play(&mut self) -> Result<()> {
+        self.update_state();
         if let State::Paused = self.state {
             self.tx.try_send(PlayTaskCmd::Play)?;
         }
@@ -456,6 +479,7 @@ impl SingleTrackPlayer {
     }
 
     pub fn stop(&mut self) -> Result<()> {
+        self.update_state();
         if let State::Paused | State::Playing = self.state {
             self.tx.try_send(PlayTaskCmd::Stop)?;
             self.state = State::Stopped;
@@ -463,7 +487,8 @@ impl SingleTrackPlayer {
         Ok(())
     }
 
-    pub fn state(&self) -> State {
+    pub fn state(&mut self) -> State {
+        self.update_state();
         self.state
     }
 }

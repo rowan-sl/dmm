@@ -16,6 +16,8 @@ pub enum Action {
     Refresh,
     Error(String),
     Help,
+    // application
+    TrackComplete,
 }
 
 // impl<'de> Deserialize<'de> for Action {
