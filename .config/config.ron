@@ -5,6 +5,9 @@ Config(
       "<Ctrl-c>": Quit,
       "<esc>": Quit,
       "<space>": PausePlay,
+      "<s>": ChangeModeSelection,
+      "<r>": ChangeModeRepeat,
+      "<n>": NextTrack,
     },
   }
 )

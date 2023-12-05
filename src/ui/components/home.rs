@@ -2,6 +2,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use color_eyre::eyre::{anyhow, bail, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
+use rand::Rng;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -12,14 +13,50 @@ use crate::{
     ui::{action::Action, symbol},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum TrackSelectionMethod {
+    Random,
+    Sequential,
+}
+
+impl TrackSelectionMethod {
+    pub fn next(&mut self) {
+        match self {
+            Self::Random => *self = Self::Sequential,
+            Self::Sequential => *self = Self::Random,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Repeat {
+    Never,
+    RepeatPlaylist,
+    RepeatTrack,
+}
+
+impl Repeat {
+    pub fn next(&mut self) {
+        *self = match self {
+            Self::Never => Self::RepeatPlaylist,
+            Self::RepeatPlaylist => Self::RepeatTrack,
+            Self::RepeatTrack => Self::Never,
+        };
+    }
+}
+
 pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     // info bar
     c_track_idx: usize,
     playlist: DlPlaylist,
     playlist_dir: PathBuf,
-    //
+    // player
     player: SingleTrackPlayer,
+    sel_method: TrackSelectionMethod,
+    repeat: Repeat,
+    /// has a single run-through (on Repeat::Never) been completed
+    play_complete: bool,
 }
 
 impl Home {
@@ -56,10 +93,45 @@ impl Home {
             playlist: dl_pl,
             playlist_dir: pl_dir,
             player,
+            sel_method: TrackSelectionMethod::Sequential,
+            repeat: Repeat::RepeatPlaylist,
+            play_complete: false,
         })
     }
 
+    fn select_next_track(&mut self) -> Result<()> {
+        match (self.repeat, self.sel_method) {
+            (
+                Repeat::RepeatTrack,
+                TrackSelectionMethod::Random | TrackSelectionMethod::Sequential,
+            ) => { /* no-op: select current track */ }
+            (Repeat::Never | Repeat::RepeatPlaylist, TrackSelectionMethod::Random) => {
+                self.c_track_idx = rand::thread_rng().gen_range(0..self.playlist.tracks.len());
+            }
+            (rep, TrackSelectionMethod::Sequential) => {
+                if self.c_track_idx != self.playlist.tracks.len() - 1 {
+                    self.c_track_idx += 1;
+                } else {
+                    match rep {
+                        Repeat::Never => {
+                            self.player.stop()?;
+                            self.play_complete = true;
+                        }
+                        Repeat::RepeatPlaylist => {
+                            self.c_track_idx = 0;
+                        }
+                        Repeat::RepeatTrack => unreachable!(),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn play_c_track(&mut self) -> Result<()> {
+        if self.play_complete {
+            return Ok(());
+        }
         let track = self.playlist.tracks.get(self.c_track_idx).unwrap();
         let track_path =
             self.playlist_dir
@@ -104,17 +176,31 @@ impl Component for Home {
             Action::TrackComplete => {
                 trace!("Received Track Complete");
                 assert_eq!(self.player.state(), player2::State::Stopped);
-                if self.c_track_idx + 1 != self.playlist.tracks.len() {
-                    trace!("Playing next track");
-                    self.c_track_idx += 1;
-                    self.play_c_track()?;
-                }
+                trace!("Playing next track");
+                self.select_next_track()?;
+                self.play_c_track()?;
             }
             Action::PausePlay => match self.player.state() {
                 player2::State::Playing => self.player.pause()?,
                 player2::State::Paused => self.player.play()?,
-                player2::State::Stopped => {}
+                player2::State::Stopped => {
+                    self.play_complete = false;
+                    match self.sel_method {
+                        TrackSelectionMethod::Random => self.select_next_track()?,
+                        TrackSelectionMethod::Sequential => self.c_track_idx = 0,
+                    }
+                }
             },
+            Action::ChangeModeSelection => {
+                self.sel_method.next();
+            }
+            Action::ChangeModeRepeat => {
+                self.repeat.next();
+            }
+            Action::NextTrack => {
+                // will trigger Action::TrackComplete
+                self.player.stop()?;
+            }
             _ => {}
         }
         Ok(None)
@@ -140,46 +226,64 @@ impl Component for Home {
         f.render_widget(titlebar, main_layout[0]);
 
         let titlebar_content = Paragraph::new(Line::from(vec![
-            Span::styled(
-                symbol::OCTAGON,
-                Style::default()
-                    .fg(if self.player.state() == player2::State::Stopped {
-                        Color::LightRed
-                    } else {
-                        Color::DarkGray
-                    })
-                    .add_modifier(Modifier::BOLD),
-            ),
+            symbol::SHUFFLE
+                .fg(match self.sel_method {
+                    TrackSelectionMethod::Random => Color::LightGreen,
+                    TrackSelectionMethod::Sequential => Color::DarkGray,
+                })
+                .add_modifier(Modifier::BOLD),
             " ".into(),
-            Span::styled(
-                symbol::PAUSE,
-                Style::default()
-                    .fg(if self.player.state() == player2::State::Paused {
-                        Color::LightRed
-                    } else {
-                        Color::DarkGray
-                    })
-                    .add_modifier(Modifier::BOLD),
-            ),
+            {
+                let (color, sym) = match self.repeat {
+                    Repeat::Never => (Color::LightRed, symbol::REPEAT_OFF),
+                    Repeat::RepeatPlaylist => (Color::LightGreen, symbol::REPEAT),
+                    Repeat::RepeatTrack => (Color::LightBlue, symbol::REPEAT_ONE),
+                };
+                sym.fg(color)
+            }
+            .add_modifier(Modifier::BOLD),
             " ".into(),
-            Span::styled(
-                symbol::PLAY,
-                Style::default()
-                    .fg(if self.player.state() == player2::State::Playing {
-                        Color::LightGreen
-                    } else {
-                        Color::DarkGray
-                    })
-                    .add_modifier(Modifier::BOLD),
-            ),
+            symbol::OCTAGON
+                .fg(if self.player.state() == player2::State::Stopped {
+                    Color::LightRed
+                } else {
+                    Color::DarkGray
+                })
+                .add_modifier(Modifier::BOLD),
+            " ".into(),
+            symbol::PAUSE
+                .fg(if self.player.state() == player2::State::Paused {
+                    Color::LightRed
+                } else {
+                    Color::DarkGray
+                })
+                .add_modifier(Modifier::BOLD),
+            " ".into(),
+            symbol::PLAY
+                .fg(if self.player.state() == player2::State::Playing {
+                    Color::LightGreen
+                } else {
+                    Color::DarkGray
+                })
+                .add_modifier(Modifier::BOLD),
             " ".into(),
             "│".fg(Color::Yellow),
             format!(
-                "track {n}/{num}: ",
+                "{}:{:0>2}->{}:{:0>2}",
+                self.player.timestamp() / 60,
+                self.player.timestamp() % 60,
+                self.player.duration() / 60,
+                self.player.duration() % 60,
+            )
+            .into(),
+            "│".fg(Color::Yellow),
+            format!(
+                "# {n}/{num}",
                 n = self.c_track_idx + 1,
                 num = self.playlist.tracks.len(),
             )
             .into(),
+            "│".fg(Color::Yellow),
             self.playlist.tracks[self.c_track_idx]
                 .track
                 .meta
@@ -192,8 +296,16 @@ impl Component for Home {
 
         let content_layout = Layout::new()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(0), Constraint::Min(0)])
+            .constraints([Constraint::Max(37), Constraint::Min(0)])
             .split(main_layout[1]);
+        let info_layout = Layout::new()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(6),
+                Constraint::Max(6),
+                Constraint::Min(0),
+            ])
+            .split(content_layout[0]);
 
         let playlist = Paragraph::new(vec![
             Line::from(self.playlist.name.clone().italic()),
@@ -212,7 +324,7 @@ impl Component for Home {
                 .border_style(Style::new().fg(Color::Yellow))
                 .borders(Borders::ALL),
         );
-        f.render_widget(playlist, content_layout[0]);
+        f.render_widget(playlist, info_layout[0]);
 
         let track = Paragraph::new(vec![
             Line::from(
@@ -238,8 +350,9 @@ impl Component for Home {
                 .title("Track".bold())
                 .border_style(Style::new().fg(Color::Yellow))
                 .borders(Borders::ALL),
-        );
-        f.render_widget(track, content_layout[1]);
+        )
+        .wrap(Wrap { trim: false });
+        f.render_widget(track, info_layout[1]);
 
         Ok(())
     }

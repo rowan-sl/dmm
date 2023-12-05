@@ -19,6 +19,12 @@ pub enum Action {
     // application
     TrackComplete,
     PausePlay,
+    // change track selection method to the next option
+    ChangeModeSelection,
+    // change repeat mode to the next option
+    ChangeModeRepeat,
+    // select the next track using the current selection mode
+    NextTrack,
 }
 
 // impl<'de> Deserialize<'de> for Action {
