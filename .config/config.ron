@@ -3,7 +3,6 @@ Config(
     Home: {
       "<q>": Quit,
       "<Ctrl-c>": Quit,
-      "<esc>": Quit,
       "<space>": PausePlay,
       "<s>": ChangeModeSelection,
       "<r>": ChangeModeRepeat,

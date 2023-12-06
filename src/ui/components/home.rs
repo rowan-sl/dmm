@@ -366,46 +366,41 @@ impl Component for Home {
         )
         .wrap(Wrap { trim: false });
         f.render_widget(track, info_layout[1]);
-        // let track = Paragraph::new(vec![
-        //     "<q> quit".into(),
-        //     "<s> toggle shuffle play".into(),
-        //     "<r> toggle repeat".into(),
-        //     "<n> skip to next track".into(),
-        // ])
-        let track = Paragraph::new(
-            self.cfg
-                .keybinds
-                .0
-                .get(&Mode::Home)
-                .unwrap()
-                .iter()
-                .map(|(keys, action)| {
-                    let mut output = String::new();
-                    for key in keys {
-                        output += "<";
-                        output += cfg::key_event_to_string(key).as_str();
-                        output += ">";
-                    }
-                    output += " ";
-                    output += match action {
-                        Action::Quit => "quit",
-                        Action::PausePlay => "pause/play",
-                        Action::ChangeModeSelection => "toggle shuffle play",
-                        Action::ChangeModeRepeat => "toggle repeat",
-                        Action::NextTrack => "skip",
-                        other => panic!("Unexpected binding to key {other:?} (bound to {keys:?})"),
-                    };
-                    output.into()
-                })
-                .collect::<Vec<_>>(),
-        )
-        .block(
-            Block::new()
-                .title("Keybinds".bold())
-                .border_style(Style::new().fg(Color::Yellow))
-                .borders(Borders::ALL),
-        )
-        .wrap(Wrap { trim: false });
+        let mut lines = self
+            .cfg
+            .keybinds
+            .0
+            .get(&Mode::Home)
+            .unwrap()
+            .iter()
+            .map(|(keys, action)| {
+                let mut output = String::new();
+                for key in keys {
+                    output += "<";
+                    output += cfg::key_event_to_string(key).as_str();
+                    output += ">";
+                }
+                output += " ";
+                output += match action {
+                    Action::Quit => "quit",
+                    Action::PausePlay => "pause/play",
+                    Action::ChangeModeSelection => "toggle shuffle play",
+                    Action::ChangeModeRepeat => "toggle repeat",
+                    Action::NextTrack => "skip",
+                    other => panic!("Unexpected binding to key {other:?} (bound to {keys:?})"),
+                };
+                output
+            })
+            .collect::<Vec<_>>();
+        lines.sort();
+        let track = Paragraph::new(lines.into_iter().map(|x| x.into()).collect::<Vec<_>>())
+            .block(
+                Block::new()
+                    .title("Keybinds".bold())
+                    .border_style(Style::new().fg(Color::Yellow))
+                    .borders(Borders::ALL),
+            )
+            .wrap(Wrap { trim: false });
         f.render_widget(track, info_layout[2]);
 
         Ok(())
