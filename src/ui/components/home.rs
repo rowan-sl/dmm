@@ -1,7 +1,8 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{cmp, fs, iter, path::PathBuf, sync::Arc};
 
 use color_eyre::eyre::{anyhow, bail, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
+use notify_rust::Notification;
 use rand::Rng;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
@@ -60,6 +61,10 @@ pub struct Home {
     play_complete: bool,
     // config
     cfg: Config,
+    // track selection list
+    t_list_state: ListState,
+    /// jump to track # when receiving TrackComplete (takes precedence over normal track selection)
+    jump_on_track_complete: Option<usize>,
 }
 
 impl Home {
@@ -100,6 +105,8 @@ impl Home {
             repeat: Repeat::RepeatPlaylist,
             play_complete: false,
             cfg: Config::default(),
+            t_list_state: ListState::default().with_selected(Some(0)),
+            jump_on_track_complete: None,
         })
     }
 
@@ -120,6 +127,10 @@ impl Home {
                         Repeat::Never => {
                             self.player.stop()?;
                             self.play_complete = true;
+                            let _handle = Notification::new()
+                                .summary("DMM Player")
+                                .body("Playlist Complete - Stopping")
+                                .show()?;
                         }
                         Repeat::RepeatPlaylist => {
                             self.c_track_idx = 0;
@@ -185,7 +196,22 @@ impl Component for Home {
                 trace!("Received Track Complete");
                 assert_eq!(self.player.state(), player2::State::Stopped);
                 trace!("Playing next track");
-                self.select_next_track()?;
+                if let Some(idx) = self.jump_on_track_complete.take() {
+                    self.c_track_idx = idx;
+                    // do not send notifications about playing a track by selection (the person using the app did this, they don't need to know)
+                } else {
+                    self.select_next_track()?;
+                    let track = &self.playlist.tracks[self.c_track_idx];
+                    let _handle = Notification::new()
+                        .summary("DMM Player")
+                        .body(&format!(
+                            "Now Playing: {name}\nby {artist}",
+                            name = track.track.meta.name,
+                            artist = track.track.meta.artist
+                        ))
+                        .show()?;
+                }
+                self.t_list_state.select(Some(self.c_track_idx));
                 self.play_c_track()?;
             }
             Action::PausePlay => match self.player.state() {
@@ -213,6 +239,22 @@ impl Component for Home {
             Action::NextTrack => {
                 // will trigger Action::TrackComplete
                 self.player.stop()?;
+            }
+            Action::TrackListSelNext => self.t_list_state.select(Some(cmp::min(
+                self.t_list_state.selected().unwrap() + 1,
+                self.playlist.tracks.len() - 1,
+            ))),
+            Action::TrackListSelPrev => self.t_list_state.select(Some(
+                self.t_list_state.selected().unwrap().saturating_sub(1),
+            )),
+            Action::TrackListPlaySelected => {
+                if self.player.state() == player2::State::Stopped {
+                    self.c_track_idx = self.t_list_state.selected().unwrap();
+                    self.play_c_track()?;
+                } else {
+                    self.jump_on_track_complete = Some(self.t_list_state.selected().unwrap());
+                    self.player.stop()?;
+                }
             }
             _ => {}
         }
@@ -339,24 +381,10 @@ impl Component for Home {
         );
         f.render_widget(playlist, info_layout[0]);
 
+        let sel_track = &self.playlist.tracks[self.t_list_state.selected().unwrap()].track;
         let track = Paragraph::new(vec![
-            Line::from(
-                self.playlist.tracks[self.c_track_idx]
-                    .track
-                    .meta
-                    .name
-                    .clone()
-                    .italic(),
-            ),
-            Line::from(vec![
-                "by: ".into(),
-                self.playlist.tracks[self.c_track_idx]
-                    .track
-                    .meta
-                    .artist
-                    .clone()
-                    .bold(),
-            ]),
+            Line::from(sel_track.meta.name.clone().italic()),
+            Line::from(vec!["by: ".bold(), sel_track.meta.artist.clone().into()]),
         ])
         .block(
             Block::new()
@@ -387,6 +415,9 @@ impl Component for Home {
                     Action::ChangeModeSelection => "toggle shuffle play",
                     Action::ChangeModeRepeat => "toggle repeat",
                     Action::NextTrack => "skip",
+                    Action::TrackListSelNext => "track list: next",
+                    Action::TrackListSelPrev => "track list: prev",
+                    Action::TrackListPlaySelected => "track list: play track",
                     other => panic!("Unexpected binding to key {other:?} (bound to {keys:?})"),
                 };
                 output
@@ -402,6 +433,39 @@ impl Component for Home {
             )
             .wrap(Wrap { trim: false });
         f.render_widget(track, info_layout[2]);
+
+        f.render_stateful_widget(
+            List::new(
+                self.playlist
+                    .tracks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, track)| {
+                        ListItem::new(Line::from(vec![
+                            {
+                                let fmt = i.to_string();
+                                let n_zeroes = 3usize.saturating_sub(fmt.len());
+                                let zeroes = iter::repeat('0').take(n_zeroes).collect::<String>();
+                                zeroes.dim()
+                            },
+                            i.to_string().into(),
+                            ": ".into(),
+                            track.track.meta.name.clone().italic(),
+                        ]))
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .block(
+                Block::new()
+                    .title("Track Selection".bold())
+                    .border_style(Style::new().fg(Color::Yellow))
+                    .borders(Borders::ALL),
+            )
+            .highlight_symbol(">")
+            .highlight_style(Style::new().fg(Color::LightGreen)),
+            content_layout[1],
+            &mut self.t_list_state,
+        );
 
         Ok(())
     }

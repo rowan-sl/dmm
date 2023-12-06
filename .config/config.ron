@@ -7,6 +7,9 @@ Config(
       "<s>": ChangeModeSelection,
       "<r>": ChangeModeRepeat,
       "<n>": NextTrack,
+      "<j>": TrackListSelNext,
+      "<k>": TrackListSelPrev,
+      "<enter>": TrackListPlaySelected,
     },
   }
 )

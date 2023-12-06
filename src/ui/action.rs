@@ -25,6 +25,9 @@ pub enum Action {
     ChangeModeRepeat,
     // select the next track using the current selection mode
     NextTrack,
+    TrackListSelNext,
+    TrackListSelPrev,
+    TrackListPlaySelected,
 }
 
 // impl<'de> Deserialize<'de> for Action {
