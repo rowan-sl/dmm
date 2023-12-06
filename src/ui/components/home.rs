@@ -8,9 +8,10 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Component, Frame};
 use crate::{
+    cfg::{self, Config},
     player2::{self, SingleTrackPlayer},
     schema::{self, DlPlaylist},
-    ui::{action::Action, symbol},
+    ui::{action::Action, mode::Mode, symbol},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,6 +58,8 @@ pub struct Home {
     repeat: Repeat,
     /// has a single run-through (on Repeat::Never) been completed
     play_complete: bool,
+    // config
+    cfg: Config,
 }
 
 impl Home {
@@ -96,6 +99,7 @@ impl Home {
             sel_method: TrackSelectionMethod::Sequential,
             repeat: Repeat::RepeatPlaylist,
             play_complete: false,
+            cfg: Config::default(),
         })
     }
 
@@ -159,6 +163,11 @@ impl Home {
 }
 
 impl Component for Home {
+    fn register_config_handler(&mut self, config: Config) -> Result<()> {
+        self.cfg = config;
+        Ok(())
+    }
+
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         let copy = self.command_tx.as_ref().unwrap().clone();
@@ -166,7 +175,6 @@ impl Component for Home {
             trace!("Track Complete");
             let _ = copy.send(Action::TrackComplete);
         })?;
-        self.play_c_track()?;
         Ok(())
     }
 
@@ -184,10 +192,15 @@ impl Component for Home {
                 player2::State::Playing => self.player.pause()?,
                 player2::State::Paused => self.player.play()?,
                 player2::State::Stopped => {
-                    self.play_complete = false;
-                    match self.sel_method {
-                        TrackSelectionMethod::Random => self.select_next_track()?,
-                        TrackSelectionMethod::Sequential => self.c_track_idx = 0,
+                    if self.play_complete {
+                        self.play_complete = false;
+                        match self.sel_method {
+                            TrackSelectionMethod::Random => self.select_next_track()?,
+                            TrackSelectionMethod::Sequential => self.c_track_idx = 0,
+                        }
+                    } else {
+                        // first play of the playlist
+                        self.play_c_track()?;
                     }
                 }
             },
@@ -353,6 +366,47 @@ impl Component for Home {
         )
         .wrap(Wrap { trim: false });
         f.render_widget(track, info_layout[1]);
+        // let track = Paragraph::new(vec![
+        //     "<q> quit".into(),
+        //     "<s> toggle shuffle play".into(),
+        //     "<r> toggle repeat".into(),
+        //     "<n> skip to next track".into(),
+        // ])
+        let track = Paragraph::new(
+            self.cfg
+                .keybinds
+                .0
+                .get(&Mode::Home)
+                .unwrap()
+                .iter()
+                .map(|(keys, action)| {
+                    let mut output = String::new();
+                    for key in keys {
+                        output += "<";
+                        output += cfg::key_event_to_string(key).as_str();
+                        output += ">";
+                    }
+                    output += " ";
+                    output += match action {
+                        Action::Quit => "quit",
+                        Action::PausePlay => "pause/play",
+                        Action::ChangeModeSelection => "toggle shuffle play",
+                        Action::ChangeModeRepeat => "toggle repeat",
+                        Action::NextTrack => "skip",
+                        other => panic!("Unexpected binding to key {other:?} (bound to {keys:?})"),
+                    };
+                    output.into()
+                })
+                .collect::<Vec<_>>(),
+        )
+        .block(
+            Block::new()
+                .title("Keybinds".bold())
+                .border_style(Style::new().fg(Color::Yellow))
+                .borders(Borders::ALL),
+        )
+        .wrap(Wrap { trim: false });
+        f.render_widget(track, info_layout[2]);
 
         Ok(())
     }
