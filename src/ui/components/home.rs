@@ -441,6 +441,7 @@ impl Component for Home {
                     .iter()
                     .enumerate()
                     .map(|(i, track)| {
+                        let i = i + 1;
                         ListItem::new(Line::from(vec![
                             {
                                 let fmt = i.to_string();
