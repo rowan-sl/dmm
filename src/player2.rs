@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     sync::{
-        atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
+        atomic::{AtomicU64, AtomicU8, Ordering},
         Arc,
     },
     thread,
@@ -16,7 +16,7 @@ use cpal::{
     Stream, SupportedStreamConfig,
 };
 use flume::Sender;
-use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rb::{RbConsumer, RbProducer, SpscRb, RB};
 use symphonia::core::{
     audio::{AudioBufferRef, RawSample, SampleBuffer, SignalSpec},
