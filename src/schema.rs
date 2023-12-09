@@ -38,15 +38,13 @@ impl DlPlaylist {
                         new: source.format.clone(),
                     })
                 }
-                match (old.kind, source.kind) {
-                    // if these are not matching, then emit DiffChange::SourceReplaceKind
-                    (old @ SourceKind::Shell { .. }, new @ SourceKind::Shell { .. }) => {
-                        diff.changes.push(DiffChange::SourceModifyKind {
-                            name: source.name.clone(),
-                            old,
-                            new,
-                        });
-                    }
+                // if these are not matching, then emit DiffChange::SourceReplaceKind
+                if old.kind != source.kind {
+                    diff.changes.push(DiffChange::SourceModifyKind {
+                        name: source.name.clone(),
+                        old: old.kind,
+                        new: source.kind,
+                    });
                 }
             } else {
                 diff.changes.push(DiffChange::AddSource { new: source });
