@@ -88,11 +88,13 @@ impl Tui {
         self
     }
 
+    #[allow(unused)]
     pub fn mouse(mut self, mouse: bool) -> Self {
         self.mouse = mouse;
         self
     }
 
+    #[allow(unused)]
     pub fn paste(mut self, paste: bool) -> Self {
         self.paste = paste;
         self

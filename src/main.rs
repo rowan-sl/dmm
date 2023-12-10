@@ -9,7 +9,7 @@ use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use heck::ToSnakeCase;
 use resolver::Resolver;
 use tokio::{
-    io::{stdin, stdout, AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{stdin, AsyncBufReadExt, BufReader},
     task::spawn_blocking,
 };
 use uuid::Uuid;
@@ -24,7 +24,6 @@ mod project_meta;
 mod resolver;
 mod schema;
 mod ui;
-mod waker;
 
 #[derive(Parser, Debug)]
 #[command(author, about, long_about = None)]
