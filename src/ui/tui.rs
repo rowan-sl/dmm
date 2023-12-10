@@ -1,25 +1,25 @@
 use std::{
     ops::{Deref, DerefMut},
-    time::Duration,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
 };
 
 use color_eyre::eyre::Result;
 use crossterm::{
     cursor,
     event::{
-        DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
         Event as CrosstermEvent, KeyEvent, KeyEventKind, MouseEvent,
     },
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use futures::{FutureExt, StreamExt};
+use flume::{Receiver, Sender};
 use ratatui::backend::CrosstermBackend as Backend;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
-    task::JoinHandle,
-};
-use tokio_util::sync::CancellationToken;
 
 pub type IO = std::io::Stdout;
 pub fn io() -> IO {
@@ -33,7 +33,6 @@ pub enum Event {
     Quit,
     Error,
     Closed,
-    Tick,
     Render,
     FocusGained,
     FocusLost,
@@ -45,42 +44,30 @@ pub enum Event {
 
 pub struct Tui {
     pub terminal: ratatui::Terminal<Backend<IO>>,
-    pub task: JoinHandle<()>,
-    pub cancellation_token: CancellationToken,
-    pub event_rx: UnboundedReceiver<Event>,
-    pub event_tx: UnboundedSender<Event>,
+    pub task: Option<JoinHandle<()>>,
+    pub close_flag: Arc<AtomicBool>,
+    pub event_rx: Receiver<Event>,
+    pub event_tx: Sender<Event>,
     pub frame_rate: f64,
-    pub tick_rate: f64,
     pub mouse: bool,
     pub paste: bool,
 }
 
 impl Tui {
     pub fn new() -> Result<Self> {
-        let tick_rate = 4.0;
-        let frame_rate = 60.0;
+        let frame_rate = 30.0;
         let terminal = ratatui::Terminal::new(Backend::new(io()))?;
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
-        let cancellation_token = CancellationToken::new();
-        let task = tokio::spawn(async {});
-        let mouse = false;
-        let paste = false;
+        let (event_tx, event_rx) = flume::unbounded();
         Ok(Self {
             terminal,
-            task,
-            cancellation_token,
+            task: None,
+            close_flag: Arc::new(AtomicBool::new(false)),
             event_rx,
             event_tx,
             frame_rate,
-            tick_rate,
-            mouse,
-            paste,
+            mouse: false,
+            paste: false,
         })
-    }
-
-    pub fn tick_rate(mut self, tick_rate: f64) -> Self {
-        self.tick_rate = tick_rate;
-        self
     }
 
     pub fn frame_rate(mut self, frame_rate: f64) -> Self {
@@ -101,79 +88,80 @@ impl Tui {
     }
 
     pub fn start(&mut self) {
-        let tick_delay = std::time::Duration::from_secs_f64(1.0 / self.tick_rate);
-        let render_delay = std::time::Duration::from_secs_f64(1.0 / self.frame_rate);
+        let render_delay = Duration::from_secs_f64(1.0 / self.frame_rate);
         self.cancel();
-        self.cancellation_token = CancellationToken::new();
-        let _cancellation_token = self.cancellation_token.clone();
-        let _event_tx = self.event_tx.clone();
-        self.task = tokio::spawn(async move {
-            let mut reader = crossterm::event::EventStream::new();
-            let mut tick_interval = tokio::time::interval(tick_delay);
-            let mut render_interval = tokio::time::interval(render_delay);
-            _event_tx.send(Event::Init).unwrap();
-            loop {
-                let tick_delay = tick_interval.tick();
-                let render_delay = render_interval.tick();
-                let crossterm_event = reader.next().fuse();
-                tokio::select! {
-                  _ = _cancellation_token.cancelled() => {
-                    break;
-                  }
-                  maybe_event = crossterm_event => {
-                    match maybe_event {
-                      Some(Ok(evt)) => {
-                        match evt {
-                          CrosstermEvent::Key(key) => {
-                            if key.kind == KeyEventKind::Press {
-                              _event_tx.send(Event::Key(key)).unwrap();
+        self.close_flag.store(false, Ordering::Relaxed);
+        let close_flag = self.close_flag.clone();
+        let event_tx = self.event_tx.clone();
+        self.task = Some(
+            thread::Builder::new()
+                .name(String::from("tui-event-listen"))
+                .spawn(move || {
+                    event_tx.send(Event::Init).unwrap();
+                    let mut last_time = Instant::now();
+                    let mut sleep_amnt = render_delay;
+                    loop {
+                        if event::poll(sleep_amnt).unwrap_or_else(|e| {
+                            error!("Error reading event: {e:?}");
+                            event_tx.send(Event::Error).unwrap();
+                            false
+                        }) {
+                            // event
+                            match event::read() {
+                                Ok(evt) => match evt {
+                                    CrosstermEvent::Key(key) => {
+                                        if key.kind == KeyEventKind::Press {
+                                            event_tx.send(Event::Key(key)).unwrap();
+                                        }
+                                    }
+                                    CrosstermEvent::Mouse(mouse) => {
+                                        event_tx.send(Event::Mouse(mouse)).unwrap();
+                                    }
+                                    CrosstermEvent::Resize(x, y) => {
+                                        event_tx.send(Event::Resize(x, y)).unwrap();
+                                    }
+                                    CrosstermEvent::FocusLost => {
+                                        event_tx.send(Event::FocusLost).unwrap();
+                                    }
+                                    CrosstermEvent::FocusGained => {
+                                        event_tx.send(Event::FocusGained).unwrap();
+                                    }
+                                    CrosstermEvent::Paste(s) => {
+                                        event_tx.send(Event::Paste(s)).unwrap();
+                                    }
+                                },
+                                Err(e) => {
+                                    error!("Error reading event: {e:?}");
+                                    event_tx.send(Event::Error).unwrap();
+                                }
                             }
-                          },
-                          CrosstermEvent::Mouse(mouse) => {
-                            _event_tx.send(Event::Mouse(mouse)).unwrap();
-                          },
-                          CrosstermEvent::Resize(x, y) => {
-                            _event_tx.send(Event::Resize(x, y)).unwrap();
-                          },
-                          CrosstermEvent::FocusLost => {
-                            _event_tx.send(Event::FocusLost).unwrap();
-                          },
-                          CrosstermEvent::FocusGained => {
-                            _event_tx.send(Event::FocusGained).unwrap();
-                          },
-                          CrosstermEvent::Paste(s) => {
-                            _event_tx.send(Event::Paste(s)).unwrap();
-                          },
                         }
-                      }
-                      Some(Err(_)) => {
-                        _event_tx.send(Event::Error).unwrap();
-                      }
-                      None => {},
+                        event_tx.send(Event::Render).unwrap();
+                        if close_flag.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        // dynamically adjust sleep time to maintain a steady framerate
+                        let now = Instant::now();
+                        sleep_amnt = render_delay
+                            .saturating_sub(last_time.elapsed().saturating_sub(sleep_amnt));
+                        last_time = now;
                     }
-                  },
-                  _ = tick_delay => {
-                      _event_tx.send(Event::Tick).unwrap();
-                  },
-                  _ = render_delay => {
-                      _event_tx.send(Event::Render).unwrap();
-                  },
-                }
-            }
-        });
+                })
+                .unwrap(),
+        );
     }
 
-    pub fn stop(&self) -> Result<()> {
+    pub fn stop(&mut self) -> Result<()> {
         self.cancel();
         let mut counter = 0;
-        while !self.task.is_finished() {
+        let Some(task) = self.task.take() else {
+            return Ok(());
+        };
+        while !task.is_finished() {
             std::thread::sleep(Duration::from_millis(1));
             counter += 1;
-            if counter > 50 {
-                self.task.abort();
-            }
-            if counter > 100 {
-                log::error!("Failed to abort task in 100 milliseconds for unknown reason");
+            if counter > (2.0 * self.frame_rate * 1000.0) as _ {
+                log::error!("Failed to kill task within 2 frames");
                 break;
             }
         }
@@ -210,11 +198,11 @@ impl Tui {
     }
 
     pub fn cancel(&self) {
-        self.cancellation_token.cancel();
+        self.close_flag.store(true, Ordering::Relaxed);
     }
 
-    pub async fn next(&mut self) -> Option<Event> {
-        self.event_rx.recv().await
+    pub fn next(&mut self) -> Option<Event> {
+        self.event_rx.recv().ok()
     }
 }
 

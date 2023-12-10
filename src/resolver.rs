@@ -1,7 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use color_eyre::eyre::{anyhow, Result};
-use tokio::fs;
 
 use crate::{
     cfg::Config,
@@ -61,18 +63,18 @@ impl Resolver {
         }
     }
 
-    pub async fn create_dirs(&mut self) -> Result<()> {
+    pub fn create_dirs(&mut self) -> Result<()> {
         if !self.d.run.try_exists()? {
-            fs::create_dir(&self.d.run).await?
+            fs::create_dir(&self.d.run)?
         }
         if !self.d.playlists.try_exists()? {
-            fs::create_dir(&self.d.sources).await?
+            fs::create_dir(&self.d.sources)?
         }
         if !self.d.playlists.try_exists()? {
-            fs::create_dir(&self.d.playlists).await?
+            fs::create_dir(&self.d.playlists)?
         }
         if !self.d.cache.try_exists()? {
-            fs::create_dir(&self.d.cache).await?
+            fs::create_dir(&self.d.cache)?
         }
         Ok(())
     }
@@ -90,16 +92,15 @@ impl Resolver {
         &self.d
     }
 
-    pub async fn resolve(&mut self) -> Result<()> {
+    pub fn resolve(&mut self) -> Result<()> {
         self.o = Output::default();
 
         self.o.config = Config::new(self.d.root.clone())?;
 
         {
-            let mut read_dir = fs::read_dir(&self.d.sources).await?;
-            while let Ok(Some(src_file)) = read_dir.next_entry().await {
-                if src_file.file_type().await?.is_file() {
-                    let read = fs::read_to_string(src_file.path()).await?;
+            for src_file in fs::read_dir(&self.d.sources)?.filter_map(Result::ok) {
+                if src_file.file_type()?.is_file() {
+                    let read = fs::read_to_string(src_file.path())?;
                     let decode = ron::from_str::<schema::Source>(&read)?;
                     self.o.sources.push(decode);
                 }
@@ -107,10 +108,9 @@ impl Resolver {
         }
 
         {
-            let mut read_dir = fs::read_dir(&self.d.playlists).await?;
-            while let Ok(Some(src_file)) = read_dir.next_entry().await {
-                if src_file.file_type().await?.is_file() {
-                    let read = fs::read_to_string(src_file.path()).await?;
+            for src_file in fs::read_dir(&self.d.playlists)?.filter_map(Result::ok) {
+                if src_file.file_type()?.is_file() {
+                    let read = fs::read_to_string(src_file.path())?;
                     let mut pl = ron::from_str::<schema::Playlist>(&read)?;
                     pl.resolved_sources = Some(pl.sources.clone());
                     pl.file_path = src_file.path();
@@ -130,11 +130,10 @@ impl Resolver {
         }
 
         {
-            let mut read_dir = fs::read_dir(&self.d.cache).await?;
-            while let Ok(Some(pl_dir)) = read_dir.next_entry().await {
-                if pl_dir.file_type().await?.is_dir() {
+            for pl_dir in fs::read_dir(&self.d.cache)?.filter_map(Result::ok) {
+                if pl_dir.file_type()?.is_dir() {
                     let index_path = pl_dir.path().join("index.ron");
-                    let index_str = fs::read_to_string(&index_path).await?;
+                    let index_str = fs::read_to_string(&index_path)?;
                     let mut index = ron::from_str::<schema::DlPlaylist>(&index_str)?;
                     index.directory = pl_dir.path();
                     self.o.cache.playlists.push(index);

@@ -2,10 +2,10 @@ use std::{cmp, fs, iter, path::PathBuf, sync::Arc};
 
 use color_eyre::eyre::{anyhow, bail, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
+use flume::Sender;
 use notify_rust::Notification;
 use rand::Rng;
 use ratatui::{prelude::*, widgets::*};
-use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Component, Frame};
 use crate::{
@@ -48,7 +48,7 @@ impl Repeat {
 }
 
 pub struct Home {
-    command_tx: Option<UnboundedSender<Action>>,
+    command_tx: Option<Sender<Action>>,
     // info bar
     c_track_idx: usize,
     playlist: DlPlaylist,
@@ -171,7 +171,7 @@ impl Component for Home {
         Ok(())
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         let copy = self.command_tx.as_ref().unwrap().clone();
         self.player.on_track_complete(move || {
@@ -183,7 +183,6 @@ impl Component for Home {
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
-            Action::Tick => {}
             Action::TrackComplete => {
                 trace!("Received Track Complete");
                 assert_eq!(self.player.state(), player2::State::Stopped);

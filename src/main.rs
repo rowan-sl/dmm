@@ -1,17 +1,17 @@
 #[macro_use]
 extern crate tracing;
 
-use std::{env, fs, path::PathBuf};
+use std::{
+    env, fs,
+    io::{self, BufRead},
+    path::PathBuf,
+};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{anyhow, bail, Result};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use heck::ToSnakeCase;
 use resolver::Resolver;
-use tokio::{
-    io::{stdin, AsyncBufReadExt, BufReader},
-    task::spawn_blocking,
-};
 use uuid::Uuid;
 
 use crate::schema::DlPlaylist;
@@ -55,20 +55,19 @@ enum Command {
     Version,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     panic::initialize_panic_handler()?;
     let args = Args::parse();
     match args.cmd {
         Command::Download { run_in, playlist } => {
             log::initialize_logging(None)?;
-            download(run_in, playlist).await?;
+            download(run_in, playlist)?;
         }
         Command::Player { playlist, run_in } => {
             let mut res = Resolver::new(resolve_run_path(run_in)?);
-            res.create_dirs().await?;
+            res.create_dirs()?;
             log::initialize_logging(Some(res.tmp_file("dmm.log")))?;
-            res.resolve().await?;
+            res.resolve()?;
             let config = res.out().config.clone();
             let chosen = {
                 let mut scores = vec![];
@@ -89,8 +88,8 @@ async fn main() -> Result<()> {
                     chosen
                 }
             };
-            let mut app = ui::app::App::new(config, 20.0, 30.0, chosen.clone())?;
-            app.run().await?;
+            let mut app = ui::app::App::new(config, 30.0, chosen.clone())?;
+            app.run()?;
         }
         Command::Version => {
             println!("{}", project_meta::version());
@@ -117,10 +116,10 @@ fn resolve_run_path(run_in: Option<PathBuf>) -> Result<PathBuf> {
     })
 }
 
-async fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
+fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
     let mut res = Resolver::new(resolve_run_path(run_in)?);
-    res.create_dirs().await?;
-    res.resolve().await?;
+    res.create_dirs()?;
+    res.resolve()?;
     let mut scores = vec![];
     let matcher = SkimMatcherV2::default().ignore_case();
     for (i, playlist) in res.out().playlists.iter().enumerate() {
@@ -139,10 +138,10 @@ async fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
             chosen.name, chosen.file_path
         );
         println!("is this correct (cont/abort)? [y/N]:");
-        let Some(next) = BufReader::new(stdin()).lines().next_line().await? else {
+        let Some(next) = io::stdin().lock().lines().next() else {
             bail!("Failed to get input");
         };
-        match next.as_str() {
+        match next?.as_str() {
             "y" | "Y" => {}
             _ => {
                 info!("Aborting");
@@ -152,14 +151,14 @@ async fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
         info!("Downloading...");
         let src = chosen.clone();
         let dest = res.dirs().cache.clone();
-        spawn_blocking(|| download_playlist_blocking(src, dest)).await??;
+        download_playlist(src, dest)?;
     }
     Ok(())
 }
 
 /// src: <playlist>.ron file (in playlists/)
 /// dest: (cache/) directory (a new subdir will be created for this playlist)
-fn download_playlist_blocking(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
+fn download_playlist(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
     let out_dir_name = playlist.name.to_snake_case();
     let out_dir = dest.join(out_dir_name);
     println!("Downloading playlist {} to {:?}", playlist.name, out_dir);

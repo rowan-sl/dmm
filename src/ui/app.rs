@@ -1,7 +1,6 @@
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
-use tokio::sync::mpsc;
 
 use super::{
     action::Action,
@@ -12,7 +11,6 @@ use super::{
 use crate::{cfg::Config, schema::DlPlaylist};
 
 pub struct App {
-    pub tick_rate: f64,
     pub frame_rate: f64,
     pub components: Vec<Box<dyn Component>>,
     pub should_quit: bool,
@@ -22,12 +20,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(config: Config, tick_rate: f64, frame_rate: f64, pl: DlPlaylist) -> Result<Self> {
+    pub fn new(config: Config, frame_rate: f64, pl: DlPlaylist) -> Result<Self> {
         let home = Home::new(pl)?;
         let fps = FpsCounter::default();
         let mode = Mode::Home;
         Ok(Self {
-            tick_rate,
             frame_rate,
             components: vec![Box::new(home), Box::new(fps)],
             should_quit: false,
@@ -37,12 +34,10 @@ impl App {
         })
     }
 
-    pub async fn run(&mut self) -> Result<()> {
-        let (action_tx, mut action_rx) = mpsc::unbounded_channel();
+    pub fn run(&mut self) -> Result<()> {
+        let (action_tx, action_rx) = flume::unbounded();
 
-        let mut tui = tui::Tui::new()?
-            .tick_rate(self.tick_rate)
-            .frame_rate(self.frame_rate);
+        let mut tui = tui::Tui::new()?.frame_rate(self.frame_rate);
         tui.enter()?;
 
         for component in self.components.iter_mut() {
@@ -58,10 +53,9 @@ impl App {
         }
 
         loop {
-            if let Some(e) = tui.next().await {
+            if let Some(e) = tui.next() {
                 match e {
                     tui::Event::Quit => action_tx.send(Action::Quit)?,
-                    tui::Event::Tick => action_tx.send(Action::Tick)?,
                     tui::Event::Render => action_tx.send(Action::Render)?,
                     tui::Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
                     tui::Event::Key(key) => {
@@ -92,38 +86,37 @@ impl App {
             }
 
             while let Ok(action) = action_rx.try_recv() {
-                if action != Action::Tick && action != Action::Render {
+                if action != Action::Render {
                     log::debug!("{action:?}");
                 }
                 match action {
-                    Action::Tick => {
-                        self.last_tick_key_events.drain(..);
-                    }
                     Action::Quit => self.should_quit = true,
                     Action::Resize(w, h) => {
                         tui.resize(Rect::new(0, 0, w, h))?;
+                        let mut errors = vec![];
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
-                                let r = component.draw(f, f.size());
-                                if let Err(e) = r {
-                                    action_tx
-                                        .send(Action::Error(format!("Failed to draw: {:?}", e)))
-                                        .unwrap();
+                                if let Err(e) = component.draw(f, f.size()) {
+                                    errors.push(e);
                                 }
                             }
                         })?;
+                        if !errors.is_empty() {
+                            Err(errors.remove(0))?
+                        }
                     }
                     Action::Render => {
+                        let mut errors = vec![];
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
-                                let r = component.draw(f, f.size());
-                                if let Err(e) = r {
-                                    action_tx
-                                        .send(Action::Error(format!("Failed to draw: {:?}", e)))
-                                        .unwrap();
+                                if let Err(e) = component.draw(f, f.size()) {
+                                    errors.push(e);
                                 }
                             }
                         })?;
+                        if !errors.is_empty() {
+                            Err(errors.remove(0))?
+                        }
                     }
                     _ => {}
                 }
