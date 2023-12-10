@@ -27,7 +27,7 @@ pub fn initialize_logging(path: Option<PathBuf>) -> Result<()> {
                 .unwrap_or(Ok(BoxMakeWriter::new(std::io::stdout)))?,
         )
         .with_target(path.is_some())
-        .with_ansi(false)
+        .with_ansi(path.is_none())
         .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env());
     tracing_subscriber::registry()
         .with(file_subscriber)
