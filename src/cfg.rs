@@ -1,16 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
 use serde::{de::Deserializer, Deserialize};
 
-use crate::{
-    project_meta::get_config_dir,
-    ui::{action::Action, mode::Mode},
-};
+use crate::ui::{action::Action, mode::Mode};
 
-const CONFIG: &str = include_str!("../.config/config.ron");
+const CONFIG: &str = include_str!("../assets/dmm.default.ron");
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
@@ -19,35 +16,17 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Result<Self, config::ConfigError> {
+    pub fn new(config_dir: PathBuf) -> Result<Self, config::ConfigError> {
         let default_config: Config = ron::from_str(CONFIG).unwrap();
-        let config_dir = get_config_dir();
-        let mut builder = config::Config::builder();
 
-        let config_files = [
-            ("config.ron", config::FileFormat::Ron),
-            ("config.json5", config::FileFormat::Json5),
-            ("config.json", config::FileFormat::Json),
-            ("config.yaml", config::FileFormat::Yaml),
-            ("config.toml", config::FileFormat::Toml),
-            ("config.ini", config::FileFormat::Ini),
-        ];
-        let mut found_config = false;
-        for (file, format) in &config_files {
-            builder = builder.add_source(
-                config::File::from(config_dir.join(file))
-                    .format(*format)
+        let mut cfg: Self = config::Config::builder()
+            .add_source(
+                config::File::from(config_dir.join("dmm.ron"))
+                    .format(config::FileFormat::Ron)
                     .required(false),
-            );
-            if config_dir.join(file).exists() {
-                found_config = true
-            }
-        }
-        if !found_config {
-            log::error!("No configuration file found. Application may not behave as expected");
-        }
-
-        let mut cfg: Self = builder.build()?.try_deserialize()?;
+            )
+            .build()?
+            .try_deserialize()?;
         debug!("{default_config:?}");
 
         for (mode, default_bindings) in default_config.keybinds.iter() {

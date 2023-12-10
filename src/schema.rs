@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::Path, process::Command};
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use color_eyre::eyre::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
@@ -6,6 +10,8 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct DlPlaylist {
+    #[serde(skip)]
+    pub directory: PathBuf,
     pub name: String,
     pub sources: Vec<Source>,
     pub tracks: Vec<DlTrack>,
@@ -26,12 +32,17 @@ impl DlPlaylist {
             });
         }
         let mut source_map: HashMap<String, Source> = HashMap::new();
+        // set of sources (by [new] name) that have changed output specification
+        let mut source_changed_output: HashSet<String> = HashSet::new();
+        // map of source names (old name -> new name)
+        let mut source_o2n_names: HashMap<String, String> = HashMap::new();
         for source in self.sources.clone() {
             source_map.insert(source.name.clone(), source);
         }
         for source in other.sources.clone() {
             if let Some(old) = source_map.remove(&source.name) {
                 if source.format != old.format {
+                    source_changed_output.insert(source.name.clone());
                     diff.changes.push(DiffChange::SourceChangeFormat {
                         name: source.name.clone(),
                         old: old.format.clone(),
@@ -40,6 +51,7 @@ impl DlPlaylist {
                 }
                 // if these are not matching, then emit DiffChange::SourceReplaceKind
                 if old.kind != source.kind {
+                    source_changed_output.insert(source.name.clone());
                     diff.changes.push(DiffChange::SourceModifyKind {
                         name: source.name.clone(),
                         old: old.kind,
@@ -60,6 +72,7 @@ impl DlPlaylist {
         for source in other.sources.clone() {
             if let Some(old) = source_map.remove(&source.kind) {
                 if old != source.name {
+                    source_o2n_names.insert(old.clone(), source.name.clone());
                     diff.changes.push(DiffChange::SourceChangeName {
                         old,
                         new: source.name,
@@ -200,15 +213,24 @@ pub struct DlTrack {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Playlist {
+    #[serde(skip)]
+    pub file_path: PathBuf,
     pub name: String,
     pub import: Vec<Import>,
     pub sources: Vec<Source>,
+    #[serde(skip)]
+    pub resolved_sources: Option<Vec<Source>>,
     pub tracks: Vec<Track>,
 }
 
 impl Playlist {
+    /// Panics if playlist sources are not yet resolved
     pub fn find_source(&self, name: &str) -> Option<&Source> {
-        self.sources.iter().find(|x| x.name == name)
+        self.resolved_sources
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|x| x.name == name)
     }
 }
 

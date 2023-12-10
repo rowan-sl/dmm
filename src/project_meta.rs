@@ -54,9 +54,15 @@ pub fn version() -> String {
     let config_dir_path = get_config_dir().display().to_string();
     let data_dir_path = get_data_dir().display().to_string();
 
+    let debug_info = if cfg!(debug_assertions) {
+        "[debug build]"
+    } else {
+        ""
+    };
+
     format!(
         "\
-{PROJECT_NAME} {GIT_COMMIT_HASH}
+{PROJECT_NAME} {GIT_COMMIT_HASH} {debug_info}
 
 Authors: {PROJECT_AUTHORS}
 

@@ -1,16 +1,17 @@
+use std::path::PathBuf;
+
 use color_eyre::eyre::Result;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
-    self, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer,
+    self, fmt::writer::BoxMakeWriter, prelude::__tracing_subscriber_SubscriberExt,
+    util::SubscriberInitExt, Layer,
 };
 
-use crate::project_meta::{get_data_dir, LOG_ENV, LOG_FILE};
+use crate::project_meta::{get_data_dir, LOG_ENV};
 
-pub fn initialize_logging() -> Result<()> {
+pub fn initialize_logging(path: Option<PathBuf>) -> Result<()> {
     let directory = get_data_dir();
     std::fs::create_dir_all(directory.clone())?;
-    let log_path = directory.join(LOG_FILE.clone());
-    let log_file = std::fs::File::create(log_path)?;
     std::env::set_var(
         "RUST_LOG",
         std::env::var("RUST_LOG")
@@ -20,8 +21,12 @@ pub fn initialize_logging() -> Result<()> {
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(true)
         .with_line_number(true)
-        .with_writer(log_file)
-        .with_target(false)
+        .with_writer(
+            path.as_ref()
+                .map(|x| Ok::<_, std::io::Error>(BoxMakeWriter::new(std::fs::File::create(x)?)))
+                .unwrap_or(Ok(BoxMakeWriter::new(std::io::stdout)))?,
+        )
+        .with_target(path.is_some())
         .with_ansi(false)
         .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env());
     tracing_subscriber::registry()
