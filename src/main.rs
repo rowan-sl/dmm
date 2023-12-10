@@ -9,7 +9,7 @@ use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use heck::ToSnakeCase;
 use resolver::Resolver;
 use tokio::{
-    io::{stdin, AsyncBufReadExt, BufReader},
+    io::{stdin, stdout, AsyncBufReadExt, AsyncWriteExt, BufReader},
     task::spawn_blocking,
 };
 use uuid::Uuid;
@@ -107,7 +107,7 @@ async fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
             "search returned playlist {:?} : {:?}",
             chosen.name, chosen.file_path
         );
-        print!("is this correct (cont/abort)? [y/N]:");
+        println!("is this correct (cont/abort)? [y/N]:");
         let Some(next) = BufReader::new(stdin()).lines().next_line().await? else {
             bail!("Failed to get input");
         };
@@ -119,7 +119,7 @@ async fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
             }
         }
         info!("Downloading...");
-        let src = chosen.file_path.clone();
+        let src = chosen.clone();
         let dest = res.dirs().cache.clone();
         spawn_blocking(|| download_playlist_blocking(src, dest)).await??;
     }
@@ -128,9 +128,7 @@ async fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
 
 /// src: <playlist>.ron file (in playlists/)
 /// dest: (cache/) directory (a new subdir will be created for this playlist)
-fn download_playlist_blocking(src: PathBuf, dest: PathBuf) -> Result<()> {
-    let content = std::fs::read_to_string(src)?;
-    let playlist = ron::from_str::<schema::Playlist>(&content)?;
+fn download_playlist_blocking(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
     let out_dir_name = playlist.name.to_snake_case();
     let out_dir = dest.join(out_dir_name);
     println!("Downloading playlist {} to {:?}", playlist.name, out_dir);
