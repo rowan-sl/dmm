@@ -157,7 +157,7 @@ fn download_playlist_blocking(playlist: schema::Playlist, dest: PathBuf) -> Resu
         let mut dl_playlist = DlPlaylist {
             directory: Default::default(),
             name: playlist.name.clone(),
-            sources: playlist.sources.clone(),
+            sources: playlist.resolved_sources.clone().unwrap(),
             tracks: vec![],
         };
         for track in &playlist.tracks {
