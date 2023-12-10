@@ -8,10 +8,6 @@ use crate::{
     schema::{self, DlPlaylist, Playlist, Source},
 };
 
-struct Input {
-    pub path: PathBuf,
-}
-
 struct State {
     pub resolved: bool,
 }
@@ -51,7 +47,6 @@ impl Directories {
 }
 
 pub struct Resolver {
-    i: Input,
     s: State,
     d: Directories,
     o: Output,
@@ -60,7 +55,6 @@ pub struct Resolver {
 impl Resolver {
     pub fn new(path: PathBuf) -> Self {
         Self {
-            i: Input { path: path.clone() },
             s: State { resolved: false },
             d: Directories::from_root(path),
             o: Output::default(),
@@ -135,27 +129,17 @@ impl Resolver {
             }
         }
 
-        // {
-        //     let mut read_dir = fs::read_dir(&cache).await?;
-        //     while let Ok(Some(pl_dir)) = read_dir.next_entry().await {
-        //         if pl_dir.file_type().await?.is_dir() {
-        //             let read = fs::read_to_string(src_file.path()).await?;
-        //             let mut pl = ron::from_str::<schema::Playlist>(&read)?;
-        //             pl.resolved_sources = Some(pl.sources.clone());
-        //             for schema::Import::Source(source) in &pl.import {
-        //                 let source = self
-        //                     .o
-        //                     .sources
-        //                     .iter()
-        //                     .find(|src| &src.name == source)
-        //                     .ok_or(anyhow!("Failed to find source {source}"))?;
-        //                 let res = pl.resolved_sources.as_mut().unwrap();
-        //                 res.push(source.clone());
-        //             }
-        //             self.o.playlists.push(pl);
-        //         }
-        //     }
-        // }
+        {
+            let mut read_dir = fs::read_dir(&self.d.cache).await?;
+            while let Ok(Some(pl_dir)) = read_dir.next_entry().await {
+                if pl_dir.file_type().await?.is_dir() {
+                    let index_path = pl_dir.path().join("index.ron");
+                    let index_str = fs::read_to_string(&index_path).await?;
+                    let mut index = ron::from_str::<schema::DlPlaylist>(&index_str)?;
+                    index.directory = pl_dir.path();
+                }
+            }
+        }
 
         self.s.resolved = true;
         Ok(())
