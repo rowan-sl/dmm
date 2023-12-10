@@ -17,6 +17,7 @@
   };
   outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
     let
+      fs = nixpkgs.lib.fileset;
       overlays = [ (import rust-overlay ) ];
       system = "x86_64-linux";
       pkgs = import nixpkgs {
@@ -26,7 +27,14 @@
       # tell crane to use this toolchain
       craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
       # cf. https://crane.dev/API.html#libcleancargosource
-      src = craneLib.cleanCargoSource ./.;
+      # src = craneLib.cleanCargoSource ./.;
+      src = fs.toSource {
+        root = ./.;
+        fileset = fs.unions [
+          ./assets/dmm.default.ron
+          (fs.fromSource (craneLib.cleanCargoSource ./.))
+        ];
+      };
       # compile-time
       nativeBuildInputs = with pkgs; [ rustToolchain clang mold-wrapped pkg-config alsa-lib ];
       # runtime
