@@ -137,6 +137,9 @@ impl Resolver {
                     let index_str = fs::read_to_string(&index_path).await?;
                     let mut index = ron::from_str::<schema::DlPlaylist>(&index_str)?;
                     index.directory = pl_dir.path();
+                    self.o.cache.playlists.push(index);
+                } else {
+                    panic!("{pl_dir:?} in cache is not a directory");
                 }
             }
         }
