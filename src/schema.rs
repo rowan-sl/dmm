@@ -13,6 +13,7 @@ pub struct DlPlaylist {
     #[serde(skip)]
     pub directory: PathBuf,
     pub name: String,
+    /// resolved source
     pub sources: Vec<Source>,
     pub tracks: Vec<DlTrack>,
 }
@@ -39,7 +40,7 @@ impl DlPlaylist {
         for source in self.sources.clone() {
             source_map.insert(source.name.clone(), source);
         }
-        for source in other.sources.clone() {
+        for source in other.resolved_sources.clone().unwrap() {
             if let Some(old) = source_map.remove(&source.name) {
                 if source.format != old.format {
                     source_changed_output.insert(source.name.clone());
@@ -80,7 +81,40 @@ impl DlPlaylist {
                 }
             }
         }
-        todo!("Track")
+
+        let mut track_map: HashMap<Meta, Track> = HashMap::new();
+        for track in self.tracks.clone() {
+            track_map.insert(track.track.meta.clone(), track.track.clone());
+        }
+        for track in other.tracks.clone() {
+            if let Some(old) = track_map.remove(&track.meta) {
+                if track.src != old.src || track.input != old.input {
+                    diff.changes
+                        .push(DiffChange::TrackChangedSource { old, new: track });
+                }
+            } else {
+                diff.changes.push(DiffChange::AddTrack { new: track });
+            }
+        }
+        for track in track_map.into_values() {
+            diff.changes.push(DiffChange::DelTrack { removed: track });
+        }
+        let mut track_map: HashMap<(String, ron::Value), Track> = HashMap::new();
+        for track in self.tracks.clone() {
+            track_map.insert(
+                (track.track.src.clone(), track.track.input.clone()),
+                track.track.clone(),
+            );
+        }
+        for track in other.tracks.clone() {
+            if let Some(old) = track_map.remove(&(track.src.clone(), track.input.clone())) {
+                if old.meta != track.meta {
+                    diff.changes
+                        .push(DiffChange::TrackLikelyChangedMeta { old, new: track })
+                }
+            }
+        }
+        diff
     }
 }
 
