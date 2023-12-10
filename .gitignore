@@ -1,3 +1,4 @@
 /target
 # This contains private playlists. example ones coming soon
 /playlist
+*.dmm-link.ron

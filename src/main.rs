@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
             download(run_in, playlist).await?;
         }
         Command::Player { playlist, run_in } => {
-            let mut res = Resolver::new(path_or_cdir(run_in)?);
+            let mut res = Resolver::new(resolve_run_path(run_in)?);
             res.create_dirs().await?;
             log::initialize_logging(Some(res.tmp_file("dmm.log")))?;
             res.resolve().await?;
@@ -82,12 +82,26 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn path_or_cdir(run_in: Option<PathBuf>) -> Result<PathBuf> {
-    Ok(run_in.unwrap_or(env::current_dir()?))
+/// selects the path to run in, in this order
+/// - `--in` argument
+/// - path specified in .dmm-link.ron
+/// - current directory
+fn resolve_run_path(run_in: Option<PathBuf>) -> Result<PathBuf> {
+    run_in.map(Ok).unwrap_or_else(|| {
+        let cdir = env::current_dir()?;
+        let path = cdir.join(".dmm-link.ron");
+        Ok(if path.try_exists()? {
+            let content = fs::read_to_string(path)?;
+            let link = ron::from_str::<schema::Link>(&content)?;
+            link.music_directory
+        } else {
+            cdir
+        })
+    })
 }
 
 async fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
-    let mut res = Resolver::new(path_or_cdir(run_in)?);
+    let mut res = Resolver::new(resolve_run_path(run_in)?);
     res.create_dirs().await?;
     res.resolve().await?;
     let mut scores = vec![];
