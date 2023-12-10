@@ -71,9 +71,27 @@ async fn main() -> Result<()> {
             log::initialize_logging(Some(res.tmp_file("dmm.log")))?;
             res.resolve().await?;
             let config = res.out().config.clone();
-            // return Ok(());
-            // let mut app = ui::app::App::new(config, 20.0, 30.0, playlist)?;
-            // app.run().await?;
+            let chosen = {
+                let mut scores = vec![];
+                let matcher = SkimMatcherV2::default().ignore_case();
+                for (i, j) in res.out().cache.playlists.iter().enumerate() {
+                    if let Some(score) = matcher.fuzzy_match(&j.name, &playlist) {
+                        scores.push((score, i));
+                    }
+                }
+                if scores.is_empty() {
+                    println!(
+                        "Failed to find matching playlist in input (searched for name: {playlist:?})"
+                    );
+                    return Ok(());
+                } else {
+                    scores.sort_by_key(|score| score.0);
+                    let chosen = &res.out().cache.playlists[scores[0].1];
+                    chosen
+                }
+            };
+            let mut app = ui::app::App::new(config, 20.0, 30.0, chosen.clone())?;
+            app.run().await?;
         }
         Command::Version => {
             println!("{}", project_meta::version());

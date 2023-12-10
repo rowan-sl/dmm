@@ -11,7 +11,7 @@ use super::{Component, Frame};
 use crate::{
     cfg::{self, Config},
     player2::{self, SingleTrackPlayer},
-    schema::{self, DlPlaylist},
+    schema::DlPlaylist,
     ui::{action::Action, mode::Mode, symbol},
 };
 
@@ -68,16 +68,7 @@ pub struct Home {
 }
 
 impl Home {
-    pub fn new(pl_dir: PathBuf) -> Result<Self> {
-        info!("Loading playlist {pl_dir:?}");
-        if !pl_dir.try_exists()? {
-            bail!("Failed to load: playlist does not exist (no such directory)");
-        }
-        if !pl_dir.join("dl_playlist.ron").try_exists()? {
-            bail!("Failed to load: playlist does not exist (no manifest `dl_playlist.ron` file in given directory)");
-        }
-        let dl_pl_str = fs::read_to_string(pl_dir.join("dl_playlist.ron"))?;
-        let dl_pl = ron::from_str::<schema::DlPlaylist>(&dl_pl_str)?;
+    pub fn new(dl_pl: DlPlaylist) -> Result<Self> {
         info!("Loaded playlist {name}", name = dl_pl.name);
 
         debug!("Initializing audio backend");
@@ -95,6 +86,7 @@ impl Home {
         };
         let player = SingleTrackPlayer::new(Arc::new(config), Arc::new(device))?;
 
+        let pl_dir = dl_pl.directory.clone();
         Ok(Self {
             command_tx: None,
             c_track_idx: 0,

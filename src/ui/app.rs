@@ -11,7 +11,7 @@ use super::{
     mode::Mode,
     tui,
 };
-use crate::cfg::Config;
+use crate::{cfg::Config, schema::DlPlaylist};
 
 pub struct App {
     pub tick_rate: f64,
@@ -25,8 +25,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(config: Config, tick_rate: f64, frame_rate: f64, pl_dir: PathBuf) -> Result<Self> {
-        let home = Home::new(pl_dir)?;
+    pub fn new(config: Config, tick_rate: f64, frame_rate: f64, pl: DlPlaylist) -> Result<Self> {
+        let home = Home::new(pl)?;
         let fps = FpsCounter::default();
         let mode = Mode::Home;
         Ok(Self {
