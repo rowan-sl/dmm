@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
-use std::{env, fs, path::PathBuf, str::Lines};
+use std::{env, fs, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{anyhow, bail, Result};
