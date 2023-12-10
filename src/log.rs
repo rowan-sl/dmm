@@ -7,11 +7,9 @@ use tracing_subscriber::{
     util::SubscriberInitExt, Layer,
 };
 
-use crate::project_meta::{get_data_dir, LOG_ENV};
+use crate::project_meta::LOG_ENV;
 
 pub fn initialize_logging(path: Option<PathBuf>) -> Result<()> {
-    let directory = get_data_dir();
-    std::fs::create_dir_all(directory.clone())?;
     std::env::set_var(
         "RUST_LOG",
         std::env::var("RUST_LOG")

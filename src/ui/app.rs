@@ -16,7 +16,6 @@ pub struct App {
     pub frame_rate: f64,
     pub components: Vec<Box<dyn Component>>,
     pub should_quit: bool,
-    pub should_suspend: bool,
     pub mode: Mode,
     pub last_tick_key_events: Vec<KeyEvent>,
     pub config: Config,
@@ -32,7 +31,6 @@ impl App {
             frame_rate,
             components: vec![Box::new(home), Box::new(fps)],
             should_quit: false,
-            should_suspend: false,
             mode,
             last_tick_key_events: Vec::new(),
             config,
@@ -102,8 +100,6 @@ impl App {
                         self.last_tick_key_events.drain(..);
                     }
                     Action::Quit => self.should_quit = true,
-                    Action::Suspend => self.should_suspend = true,
-                    Action::Resume => self.should_suspend = false,
                     Action::Resize(w, h) => {
                         tui.resize(Rect::new(0, 0, w, h))?;
                         tui.draw(|f| {
@@ -137,15 +133,7 @@ impl App {
                     };
                 }
             }
-            if self.should_suspend {
-                tui.suspend()?;
-                action_tx.send(Action::Resume)?;
-                tui = tui::Tui::new()?
-                    .tick_rate(self.tick_rate)
-                    .frame_rate(self.frame_rate);
-                // tui.mouse(true);
-                tui.enter()?;
-            } else if self.should_quit {
+            if self.should_quit {
                 tui.stop()?;
                 break;
             }
