@@ -220,6 +220,7 @@ impl Tui {
         Ok(())
     }
 
+    #[allow(unused)]
     pub fn resume(&mut self) -> Result<()> {
         self.enter()?;
         Ok(())
