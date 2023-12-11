@@ -32,8 +32,8 @@ pub fn version() -> String {
     format!(
         "\
 {PROJECT_NAME} {GIT_COMMIT_HASH} ({PROJECT_VERSION_CODENAME}) {debug_info}
-
 Authors: {PROJECT_AUTHORS}
+Repository: https://git.fawkes.io/mtnash/dmm
 
 exe: {current_exe_path}"
     )
