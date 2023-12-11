@@ -11,7 +11,7 @@ pub static PROJECT_NAME: &'static str = clap::crate_name!();
 pub static PROJECT_AUTHORS: &'static str = clap::crate_authors!();
 
 /// Codename associated with the current project version
-pub static PROJECT_VERSION_CODENAME: &'static str = "Margerine";
+pub static PROJECT_VERSION_CODENAME: &'static str = "Margarine";
 const_assert!(const_eq!(clap::crate_version!(), "0.2.0"));
 
 lazy_static! {
