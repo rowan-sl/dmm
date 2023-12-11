@@ -136,6 +136,11 @@ impl Tui {
                                 }
                             }
                         }
+                        // -- note --
+                        // this may appear to cause issues (high framerate when pressing buttons quickly)
+                        // in reality, this allows for a very low framerate (10fps and still have good input feel)
+                        // by rendering a frame when you give an input.
+                        // do NOT fix this
                         event_tx.send(Event::Render).unwrap();
                         if close_flag.load(Ordering::Relaxed) {
                             break;

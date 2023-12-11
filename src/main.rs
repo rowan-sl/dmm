@@ -88,7 +88,7 @@ fn main() -> Result<()> {
                     chosen
                 }
             };
-            let mut app = ui::app::App::new(config, 30.0, chosen.clone())?;
+            let mut app = ui::app::App::new(config, 15.0, chosen.clone())?;
             app.run()?;
         }
         Command::Version => {
