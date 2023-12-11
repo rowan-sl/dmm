@@ -1,10 +1,11 @@
 [package]
 name = "dmm"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = [ "Rowan S-L <r@fawkes.io>" ]
 description = "DMM - The Declarative Music Manager"
 repository = "https://git.fawkes.io/mtnash/dmm"
+homepage = "https://git.fawkes.io/mtnash/dmm"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
