@@ -6,6 +6,7 @@ authors = [ "Rowan S-L <r@fawkes.io>" ]
 description = "DMM - The Declarative Music Manager"
 repository = "https://git.fawkes.io/mtnash/dmm"
 homepage = "https://git.fawkes.io/mtnash/dmm"
+license = "GPL-3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
