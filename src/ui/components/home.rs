@@ -166,6 +166,13 @@ impl Home {
 }
 
 impl Component for Home {
+    fn init(&mut self, _area: Rect) -> Result<()> {
+        if self.cfg.play_on_start {
+            self.play_c_track()?;
+        }
+        Ok(())
+    }
+
     fn register_config_handler(&mut self, config: Config) -> Result<()> {
         self.cfg = config;
         Ok(())

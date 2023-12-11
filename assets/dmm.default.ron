@@ -1,4 +1,5 @@
 Config(
+  play_on_start: false,
   keybinds: {
     Home: {
       "<q>": Quit,

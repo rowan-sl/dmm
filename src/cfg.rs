@@ -11,6 +11,7 @@ const CONFIG: &str = include_str!("../assets/dmm.default.ron");
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
+    pub play_on_start: bool,
     #[serde(default)]
     pub keybinds: KeyBindings,
 }
@@ -20,6 +21,7 @@ impl Config {
         let default_config: Config = ron::from_str(CONFIG).unwrap();
 
         let mut cfg: Self = config::Config::builder()
+            .set_default("play_on_start", default_config.play_on_start)?
             .add_source(
                 config::File::from(config_dir.join("dmm.ron"))
                     .format(config::FileFormat::Ron)
