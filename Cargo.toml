@@ -36,6 +36,8 @@ config = "0.13"
 derive_deref = "1.1"
 rand = "0.8"
 num_enum = "0.7"
+static_assertions = "1.1.0"
+const_cmp = "0.0.0"
 
 [profile.release]
 lto = true

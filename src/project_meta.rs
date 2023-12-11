@@ -1,12 +1,18 @@
 use std::env;
 
+use const_cmp::const_eq;
 use lazy_static::lazy_static;
+use static_assertions::const_assert;
 
 pub static GIT_COMMIT_HASH: &'static str = env!("_GIT_INFO");
 pub static PROJECT_NAME: &'static str = clap::crate_name!();
 // in git_commit_hash
 // pub static PROJECT_VERSION: &'static str = clap::crate_version!();
 pub static PROJECT_AUTHORS: &'static str = clap::crate_authors!();
+
+/// Codename associated with the current project version
+pub static PROJECT_VERSION_CODENAME: &'static str = "Margerine";
+const_assert!(const_eq!(clap::crate_version!(), "0.2.0"));
 
 lazy_static! {
     pub static ref LOG_ENV: String = format!("{}_LOGLEVEL", PROJECT_NAME);
@@ -25,7 +31,7 @@ pub fn version() -> String {
 
     format!(
         "\
-{PROJECT_NAME} {GIT_COMMIT_HASH} {debug_info}
+{PROJECT_NAME} {GIT_COMMIT_HASH} ({PROJECT_VERSION_CODENAME}) {debug_info}
 
 Authors: {PROJECT_AUTHORS}
 
