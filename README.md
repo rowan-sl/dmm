@@ -122,6 +122,11 @@ On the right:
 
 Currently no {nixpkgs,AUR,cargo} package exists (coming soon?), so installation is only supported through nix flakes.
 
+**IMPORTANT: In all examples using Nix, the URL contains a placeholder, `<version-name>` which should be replaced with the latest version,
+e.g. `v0.2.0` (you should check the releases tab for what it actually is!)**
+
+**Additionally, to update DMM you need to change the `<version-name>` to the latest one *as well as* using `nix flake update` or similar!**
+
 ### 1) NixOS (Flake)
 
 To install the `dmm` flake, add it to your system configurations `inputs`
@@ -134,7 +139,7 @@ inputs = {
   
   # -- add this part --
   dmm = {
-    url = "git+https://git.fawkes.io/mtnash/dmm";
+    url = "tarball+https://git.fawkes.io/mtnash/dmm/archive/<version-name>.tar.gz";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 };
@@ -156,7 +161,7 @@ For more information on how to do this, I found [this blog post](https://www.fal
 To install `dmm` non-declaratively using `nix profile`, run the following:
 
 ```zsh
-nix profile install git+https://git.fawkes.io/mtnash/dmm
+nix profile install tarball+https://git.fawkes.io/mtnash/dmm/archive/<version-name>.tar.gz
 ```
 
 #### 2.1) Nix Build (Flake)
@@ -164,7 +169,7 @@ nix profile install git+https://git.fawkes.io/mtnash/dmm
 To build, but not install `dmm` you can use `nix build`:
 
 ```zsh
-nix build git+https://git.fawkes.io/mtnash/dmm
+nix build tarball+https://git.fawkes.io/mtnash/dmm/archive/<version-name>.tar.gz
 ```
 
 The executable will be located in `./result/dmm`
