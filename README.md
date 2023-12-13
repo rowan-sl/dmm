@@ -134,7 +134,7 @@ inputs = {
   
   # -- add this part --
   dmm = {
-    url = "/home/rowan/projects/dmm";
+    url = "git+https://git.fawkes.io/mtnash/dmm";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 };
