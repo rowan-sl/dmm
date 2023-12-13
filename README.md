@@ -9,9 +9,9 @@ If any of these things apply to you, you should try DMM!
 
 ## Table of Contents
 
-- [Explainer/Usage](##how-it-works)
-- [Installation](##installation)
-- [Misc](##misc)
+- [Explainer/Usage](#how-it-works)
+- [Installation](#installation)
+- [Misc](#misc)
 
 ## How It Works
 
