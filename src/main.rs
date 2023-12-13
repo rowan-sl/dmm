@@ -111,6 +111,9 @@ fn resolve_run_path(run_in: Option<PathBuf>) -> Result<PathBuf> {
             let link = ron::from_str::<schema::Link>(&content)?;
             link.music_directory
         } else {
+            if !cdir.join("dmm.ron").try_exists()? {
+                bail!("Cannot locate music directory (it is not the current directory, and no .dmm-link.ron exists)");
+            }
             cdir
         })
     })
