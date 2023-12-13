@@ -103,9 +103,9 @@ Navbar (the top of the screen)
 - shuffle play (on/off)
 - repeat (on/single/off)
 - stop/play/pause
-- \<time in song> -> \<length of song>
-- \<song #>/\<# of songs in playlist>
-- \<track title>
+- `<time in song> -> <length of song>`
+- `<song #>/<# of songs in playlist>`
+- `<track title>`
 
 On the left:
 - Playlist information
