@@ -1,14 +1,23 @@
 [package]
 name = "dmm"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = [ "Rowan S-L <r@fawkes.io>" ]
-description = "DMM - The Declarative Music Manager"
-repository = "https://git.fawkes.io/mtnash/dmm"
+description = "The Declarative Music Manager"
+#TODO: make webpage for the DMM docs?
 homepage = "https://git.fawkes.io/mtnash/dmm"
+repository = "https://git.fawkes.io/mtnash/dmm"
+documentation = "https://git.fawkes.io/mtnash/dmm"
+readme = "README.md"
 license = "GPL-3.0"
+keywords = [ "music", "audio", "player" ]
+categories = [ ]
+build = "build.rs"
+exclude = [ "/flake.nix", "/flake.lock" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lints.rust]
+unsafe_code = "forbid"
 
 [dependencies]
 clap = { version = "4.4", features = ["derive", "wrap_help", "cargo", "unicode", "string", "unstable-styles"] }
@@ -42,5 +51,3 @@ const_cmp = "0.0.0"
 
 [profile.release]
 lto = true
-strip = true
-codegen-units = 1

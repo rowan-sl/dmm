@@ -12,7 +12,7 @@ pub static PROJECT_AUTHORS: &'static str = clap::crate_authors!();
 
 /// Codename associated with the current project version
 pub static PROJECT_VERSION_CODENAME: &'static str = "Margarine";
-const_assert!(const_eq!(clap::crate_version!(), "0.2.1"));
+const_assert!(const_eq!(clap::crate_version!(), "0.2.2"));
 
 lazy_static! {
     pub static ref LOG_ENV: String = format!("{}_LOGLEVEL", PROJECT_NAME);
