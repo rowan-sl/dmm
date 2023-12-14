@@ -13,6 +13,10 @@ If any of these things apply to you, you should try DMM!
 - [Installation](#installation)
 - [Misc](#misc)
 
+**WARNING: the main branch of DMM can move quickly, and the documentation here may be inacurate.
+the [stable branch](https://git.fawkes.io/mtnash/dmm/src/branch/stable) has the latest stable release,
+and it is recommended to look there instead**
+
 ## How It Works
 
 DMM, like Nix, is *declarative*. Using DMM to play music happens in 3 steps
@@ -122,10 +126,10 @@ On the right:
 
 Currently no {nixpkgs,AUR,cargo} package exists (coming soon?), so installation is only supported through nix flakes.
 
-**IMPORTANT: In all examples using Nix, the URL contains a placeholder, `<version-name>` which should be replaced with the latest version,
-e.g. `v0.2.0` (you should check the releases tab for what it actually is!)**
-
-**Additionally, to update DMM you need to change the `<version-name>` to the latest one *as well as* using `nix flake update` or similar!**
+**IMPORTANT: In all examples using Nix, the URL contains a placeholder, `<version-name>` which must be replaced with one of the following**
+- `stable` - will automatically download the latest stable release
+- a specific version from the releases tab, eg `v0.2.0` <- this is not the actual latest release
+  - **if you choose this method, you need to update the version tag in order to update DMM as well as using `nix flake update` or similar!**
 
 ### 1) NixOS (Flake)
 
