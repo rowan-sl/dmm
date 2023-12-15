@@ -151,7 +151,6 @@ fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
                 return Ok(());
             }
         }
-        info!("Downloading...");
         let src = chosen.clone();
         let dest = res.dirs().cache.clone();
         download_playlist(src, dest)?;
@@ -164,14 +163,29 @@ fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
 fn download_playlist(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
     let out_dir_name = playlist.name.to_snake_case();
     let out_dir = dest.join(out_dir_name);
-    println!("Downloading playlist {} to {:?}", playlist.name, out_dir);
     if out_dir.try_exists()? {
-        println!("Playlist already exists, checking for changes");
+        info!("Playlist already exists, checking for changes");
         let dl_playlist_str = fs::read_to_string(out_dir.join("index.ron"))?;
         let dl_playlist = ron::from_str::<schema::DlPlaylist>(&dl_playlist_str)?;
         let diff = dl_playlist.gen_diff(&playlist);
+        if diff.changes.is_empty() {
+            info!("No changes to playlist, nothing to do");
+            return Ok(());
+        }
         diff.display();
+        println!("Apply changes? [y/N]:");
+        let Some(next) = io::stdin().lock().lines().next() else {
+            bail!("Failed to get input");
+        };
+        match next?.as_str() {
+            "y" | "Y" => {}
+            _ => {
+                info!("Aborting");
+                return Ok(());
+            }
+        }
     } else {
+        info!("Downloading playlist {} to {:?}", playlist.name, out_dir);
         fs::create_dir(&out_dir)?;
         let mut dl_playlist = DlPlaylist {
             directory: Default::default(),
@@ -180,7 +194,7 @@ fn download_playlist(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
             tracks: vec![],
         };
         for track in &playlist.tracks {
-            println!("Downloading {}", track.meta.name);
+            info!("Downloading {}", track.meta.name);
             let source = playlist.find_source(&track.src).ok_or(anyhow!(
                 "Could not find source {} for track {}",
                 track.src,
@@ -189,7 +203,7 @@ fn download_playlist(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
             let uuid = Uuid::new_v4();
             let path = out_dir.join(uuid.to_string());
             source.execute(track.input.clone(), &path)?;
-            println!("Download complete");
+            debug!("Download complete");
             dl_playlist.tracks.push(schema::DlTrack {
                 track: track.clone(),
                 track_id: uuid,
@@ -200,7 +214,7 @@ fn download_playlist(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
             ron::ser::PrettyConfig::new().struct_names(true),
         )?;
         fs::write(out_dir.join("index.ron"), dl_playlist_str.as_bytes())?;
-        println!("Downloading playlist complete");
+        info!("Downloading playlist complete");
     }
 
     Ok(())
