@@ -182,7 +182,7 @@ impl DlPlaylistDiff {
                     artist = new.meta.artist
                 ),
                 DelTrack { removed } => println!(
-                    " + [track]\t '{name}' by {artist}",
+                    " - [track]\t '{name}' by {artist}",
                     name = removed.meta.name,
                     artist = removed.meta.artist
                 ),
