@@ -48,6 +48,9 @@ rand = "0.8"
 num_enum = "0.7"
 static_assertions = "1.1.0"
 const_cmp = "0.0.0"
+highway = "1.1.0"
+base64 = "0.21.5"
+thiserror = "1.0.51"
 
 [profile.release]
 lto = true

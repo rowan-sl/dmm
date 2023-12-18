@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::schema::DlPlaylist;
 
+mod cache;
 mod cfg;
 mod log;
 mod panic;
