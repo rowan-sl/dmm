@@ -83,10 +83,16 @@ dmm download "Christmas Songs"
 the third parameter, (here "Christmas Songs") is used to search all playlist in the `playlists/` directory for ones with similar names.
 it can be a part of, or similar to the playlist name (the program will ask you to check the playlist it chose was correct before continuing)
 
-#### 2.1) Update Already Cached Playlists
+#### 2.1) Updating the Cache
 
-In its *current* state, DMM does not know how to update a playlist cache. if you need to do this (e.g. you added a new song),
-remove the directory in `cache/` that has the same name as the playlist, and then do the download process again.
+If new songs are added or a source changes, songs need to be re-downloaded. this is as simple as running `dmm download` again.
+- changing a sources *name*, or the name/artist field of a track will not trigger this
+- changing the command/parameters of a source *at all* will trigger a re-download. there is currently no way to tell dmm to not do this.
+
+#### 2.2) Garbage Collection
+
+When songs are no longer referenced by a playlist, they remain in the cache, taking up space.
+To clean the cache (delete all audio not *currently referenced*), run `dmm gc`
 
 ### 3) Enjoy!
 

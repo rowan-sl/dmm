@@ -1,6 +1,6 @@
 [package]
 name = "dmm"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 authors = [ "Rowan S-L <r@fawkes.io>" ]
 description = "The Declarative Music Manager"
