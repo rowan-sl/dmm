@@ -217,6 +217,8 @@ fn gc(run_in: Option<PathBuf>, dry_run: bool) -> Result<()> {
         let entry = entry?;
         let hash = entry
             .path()
+            .file_name()
+            .unwrap()
             .to_str()
             .expect("path not utf-8")
             .parse::<cache::Hash>()?;
