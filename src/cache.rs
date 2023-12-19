@@ -34,7 +34,14 @@ pub struct Hash {
 impl Hash {
     pub fn generate(source: &Source, input: &ron::Value) -> Self {
         let mut hasher = HighwayHasher::default();
-        source.hash(&mut hasher);
+        // ignore the name of the source, only the input and kind (if the name changes, it wont need to update)
+        let Source {
+            name: _,
+            format,
+            kind,
+        } = source;
+        format.hash(&mut hasher);
+        kind.hash(&mut hasher);
         input.hash(&mut hasher);
         let out = hasher.finalize256();
         Self {
