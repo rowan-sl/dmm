@@ -6,8 +6,9 @@ use std::{
 use color_eyre::eyre::{anyhow, Result};
 
 use crate::{
+    cache::CacheDir,
     cfg::Config,
-    schema::{self, DlPlaylist, Playlist, Source},
+    schema::{self, Playlist, Source},
 };
 
 struct State {
@@ -19,12 +20,7 @@ pub struct Output {
     pub config: Config,
     pub sources: Vec<Source>,
     pub playlists: Vec<Playlist>,
-    pub cache: Cache,
-}
-
-#[derive(Default)]
-pub struct Cache {
-    pub playlists: Vec<DlPlaylist>,
+    pub cache: CacheDir,
 }
 
 pub struct Directories {
@@ -130,17 +126,7 @@ impl Resolver {
         }
 
         {
-            for pl_dir in fs::read_dir(&self.d.cache)?.filter_map(Result::ok) {
-                if pl_dir.file_type()?.is_dir() {
-                    let index_path = pl_dir.path().join("index.ron");
-                    let index_str = fs::read_to_string(&index_path)?;
-                    let mut index = ron::from_str::<schema::DlPlaylist>(&index_str)?;
-                    index.directory = pl_dir.path();
-                    self.o.cache.playlists.push(index);
-                } else {
-                    panic!("{pl_dir:?} in cache is not a directory");
-                }
-            }
+            self.o.cache = CacheDir::new(self.d.cache.clone());
         }
 
         self.s.resolved = true;

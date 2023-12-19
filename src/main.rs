@@ -2,6 +2,7 @@
 extern crate tracing;
 
 use std::{
+    collections::{HashMap, HashSet},
     env, fs,
     io::{self, BufRead},
     path::PathBuf,
@@ -10,11 +11,8 @@ use std::{
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{anyhow, bail, Result};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use heck::ToSnakeCase;
 use resolver::Resolver;
-use uuid::Uuid;
-
-use crate::schema::DlPlaylist;
+use schema::Playlist;
 
 mod cache;
 mod cfg;
@@ -54,6 +52,18 @@ enum Command {
     },
     /// Print version information
     Version,
+    /// Garbage collect store
+    ///
+    /// deletes any downloaded files that are no longer referenced
+    /// by any playlists
+    GC {
+        /// directory to "run in"
+        #[arg(long = "in")]
+        run_in: Option<PathBuf>,
+        /// find, but do not remove, unreferenced files
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -69,11 +79,10 @@ fn main() -> Result<()> {
             res.create_dirs()?;
             log::initialize_logging(Some(res.tmp_file("dmm.log")))?;
             res.resolve()?;
-            let config = res.out().config.clone();
-            let chosen = {
+            let chosen: Playlist = {
                 let mut scores = vec![];
                 let matcher = SkimMatcherV2::default().ignore_case();
-                for (i, j) in res.out().cache.playlists.iter().enumerate() {
+                for (i, j) in res.out().playlists.iter().enumerate() {
                     if let Some(score) = matcher.fuzzy_match(&j.name, &playlist) {
                         scores.push((score, i));
                     }
@@ -85,15 +94,19 @@ fn main() -> Result<()> {
                     return Ok(());
                 } else {
                     scores.sort_by_key(|score| score.0);
-                    let chosen = &res.out().cache.playlists[scores[0].1];
-                    chosen
+                    let chosen = &res.out().playlists[scores[0].1];
+                    chosen.clone()
                 }
             };
-            let mut app = ui::app::App::new(config, 15.0, chosen.clone())?;
+            let mut app = ui::app::App::new(res, 15.0, chosen)?;
             app.run()?;
         }
         Command::Version => {
             println!("{}", project_meta::version());
+        }
+        Command::GC { run_in, dry_run } => {
+            log::initialize_logging(None)?;
+            gc(run_in, dry_run)?;
         }
     }
     Ok(())
@@ -153,70 +166,69 @@ fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
             }
         }
         let src = chosen.clone();
-        let dest = res.dirs().cache.clone();
-        download_playlist(src, dest)?;
+        download_playlist(src, &res.out().cache)?;
     }
     Ok(())
 }
 
-/// src: <playlist>.ron file (in playlists/)
-/// dest: (cache/) directory (a new subdir will be created for this playlist)
-fn download_playlist(playlist: schema::Playlist, dest: PathBuf) -> Result<()> {
-    let out_dir_name = playlist.name.to_snake_case();
-    let out_dir = dest.join(out_dir_name);
-    if out_dir.try_exists()? {
-        info!("Playlist already exists, checking for changes");
-        let dl_playlist_str = fs::read_to_string(out_dir.join("index.ron"))?;
-        let dl_playlist = ron::from_str::<schema::DlPlaylist>(&dl_playlist_str)?;
-        let diff = dl_playlist.gen_diff(&playlist);
-        if diff.changes.is_empty() {
-            info!("No changes to playlist, nothing to do");
-            return Ok(());
+fn download_playlist(playlist: schema::Playlist, cache: &cache::CacheDir) -> Result<()> {
+    info!("downloading tracks in playlist {} to cache", playlist.name);
+    for track in &playlist.tracks {
+        info!("downloading {}", track.meta.name);
+        let source = playlist.find_source(&track.src).ok_or(anyhow!(
+            "Could not find source {} for track {}",
+            track.src,
+            track.meta.name
+        ))?;
+        let hash = cache::Hash::generate(source, &track.input);
+        if cache.find(hash).is_some() {
+            info!("track exists in cache [skiping]");
+            continue;
         }
-        diff.display();
-        println!("Apply changes? [y/N]:");
-        let Some(next) = io::stdin().lock().lines().next() else {
-            bail!("Failed to get input");
-        };
-        match next?.as_str() {
-            "y" | "Y" => {}
-            _ => {
-                info!("Aborting");
-                return Ok(());
+        let path = cache.create(hash);
+        source.execute(track.input.clone(), &path)?;
+        debug!("download complete");
+    }
+    info!("Done!");
+    Ok(())
+}
+
+fn gc(run_in: Option<PathBuf>, dry_run: bool) -> Result<()> {
+    let mut res = Resolver::new(resolve_run_path(run_in)?);
+    res.create_dirs()?;
+    res.resolve()?;
+    let mut hashes = HashSet::new();
+    let mut source_map = HashMap::new();
+    for playlist in &res.out().playlists {
+        for source in playlist.resolved_sources.as_ref().unwrap() {
+            source_map.insert(source.name.clone(), source.clone());
+        }
+        for track in &playlist.tracks {
+            let source = source_map
+                .get(&track.src)
+                .expect("Cannot find source for track");
+            let hash = cache::Hash::generate(source, &track.input);
+            hashes.insert(hash);
+        }
+    }
+    let mut bytes_removed = 0u64;
+    let mut files_removed = 0usize;
+    for entry in res.dirs().cache.read_dir()? {
+        let entry = entry?;
+        let hash = entry
+            .path()
+            .to_str()
+            .expect("path not utf-8")
+            .parse::<cache::Hash>()?;
+        if !hashes.contains(&hash) {
+            info!("deleting {}", hash.to_string());
+            bytes_removed += entry.metadata()?.len();
+            files_removed += 1;
+            if !dry_run {
+                fs::remove_file(entry.path())?;
             }
         }
-    } else {
-        info!("Downloading playlist {} to {:?}", playlist.name, out_dir);
-        fs::create_dir(&out_dir)?;
-        let mut dl_playlist = DlPlaylist {
-            directory: Default::default(),
-            name: playlist.name.clone(),
-            sources: playlist.resolved_sources.clone().unwrap(),
-            tracks: vec![],
-        };
-        for track in &playlist.tracks {
-            info!("Downloading {}", track.meta.name);
-            let source = playlist.find_source(&track.src).ok_or(anyhow!(
-                "Could not find source {} for track {}",
-                track.src,
-                track.meta.name
-            ))?;
-            let uuid = Uuid::new_v4();
-            let path = out_dir.join(uuid.to_string());
-            source.execute(track.input.clone(), &path)?;
-            debug!("Download complete");
-            dl_playlist.tracks.push(schema::DlTrack {
-                track: track.clone(),
-                track_id: uuid,
-            });
-        }
-        let dl_playlist_str = ron::ser::to_string_pretty(
-            &dl_playlist,
-            ron::ser::PrettyConfig::new().struct_names(true),
-        )?;
-        fs::write(out_dir.join("index.ron"), dl_playlist_str.as_bytes())?;
-        info!("Downloading playlist complete");
     }
-
+    info!("removed {files_removed} entries, freed {bytes_removed} bytes");
     Ok(())
 }

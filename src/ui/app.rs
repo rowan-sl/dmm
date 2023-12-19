@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
@@ -8,7 +10,7 @@ use super::{
     mode::Mode,
     tui,
 };
-use crate::{cfg::Config, schema::DlPlaylist};
+use crate::{resolver::Resolver, schema::Playlist};
 
 pub struct App {
     pub frame_rate: f64,
@@ -16,12 +18,13 @@ pub struct App {
     pub should_quit: bool,
     pub mode: Mode,
     pub last_tick_key_events: Vec<KeyEvent>,
-    pub config: Config,
+    pub resolver: Arc<Resolver>,
 }
 
 impl App {
-    pub fn new(config: Config, frame_rate: f64, pl: DlPlaylist) -> Result<Self> {
-        let home = Home::new(pl)?;
+    pub fn new(res: Resolver, frame_rate: f64, pl: Playlist) -> Result<Self> {
+        let resolver = Arc::new(res);
+        let home = Home::new(pl.clone(), resolver.clone())?;
         let fps = FpsCounter::default();
         let mode = Mode::Home;
         Ok(Self {
@@ -30,7 +33,7 @@ impl App {
             should_quit: false,
             mode,
             last_tick_key_events: Vec::new(),
-            config,
+            resolver,
         })
     }
 
@@ -45,7 +48,7 @@ impl App {
         }
 
         for component in self.components.iter_mut() {
-            component.register_config_handler(self.config.clone())?;
+            component.register_config_handler(self.resolver.out().config.clone())?;
         }
 
         for component in self.components.iter_mut() {
@@ -59,7 +62,7 @@ impl App {
                     tui::Event::Render => action_tx.send(Action::Render)?,
                     tui::Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
                     tui::Event::Key(key) => {
-                        if let Some(keymap) = self.config.keybinds.get(&self.mode) {
+                        if let Some(keymap) = self.resolver.out().config.keybinds.get(&self.mode) {
                             if let Some(action) = keymap.get(&vec![key]) {
                                 log::info!("Got action: {action:?}");
                                 action_tx.send(action.clone())?;

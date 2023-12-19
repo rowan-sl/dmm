@@ -1,4 +1,4 @@
-use std::{cmp, fs, iter, path::PathBuf, sync::Arc};
+use std::{cmp, fs, iter, sync::Arc};
 
 use color_eyre::eyre::{anyhow, bail, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -9,9 +9,11 @@ use ratatui::{prelude::*, widgets::*};
 
 use super::{Component, Frame};
 use crate::{
+    cache,
     cfg::{self, Config},
     player2::{self, SingleTrackPlayer},
-    schema::DlPlaylist,
+    resolver::Resolver,
+    schema::Playlist,
     ui::{action::Action, mode::Mode, symbol},
 };
 
@@ -51,8 +53,7 @@ pub struct Home {
     command_tx: Option<Sender<Action>>,
     // info bar
     c_track_idx: usize,
-    playlist: DlPlaylist,
-    playlist_dir: PathBuf,
+    playlist: Playlist,
     // player
     player: SingleTrackPlayer,
     sel_method: TrackSelectionMethod,
@@ -65,11 +66,13 @@ pub struct Home {
     t_list_state: ListState,
     /// jump to track # when receiving TrackComplete (takes precedence over normal track selection)
     jump_on_track_complete: Option<usize>,
+    // resolver
+    resolver: Arc<Resolver>,
 }
 
 impl Home {
-    pub fn new(dl_pl: DlPlaylist) -> Result<Self> {
-        info!("Loaded playlist {name}", name = dl_pl.name);
+    pub fn new(pl: Playlist, res: Arc<Resolver>) -> Result<Self> {
+        info!("Loaded playlist {name}", name = pl.name);
 
         debug!("Initializing audio backend");
         let host = cpal::default_host();
@@ -86,12 +89,10 @@ impl Home {
         };
         let player = SingleTrackPlayer::new(Arc::new(config), Arc::new(device))?;
 
-        let pl_dir = dl_pl.directory.clone();
         Ok(Self {
             command_tx: None,
             c_track_idx: 0,
-            playlist: dl_pl,
-            playlist_dir: pl_dir,
+            playlist: pl,
             player,
             sel_method: TrackSelectionMethod::Sequential,
             repeat: Repeat::RepeatPlaylist,
@@ -99,6 +100,7 @@ impl Home {
             cfg: Config::default(),
             t_list_state: ListState::default().with_selected(Some(0)),
             jump_on_track_complete: None,
+            resolver: res,
         })
     }
 
@@ -140,21 +142,24 @@ impl Home {
             return Ok(());
         }
         let track = self.playlist.tracks.get(self.c_track_idx).unwrap();
-        let track_path =
-            self.playlist_dir
-                .read_dir()?
-                .find(|res| {
-                    res.as_ref().is_ok_and(|entry| {
-                        entry.path().file_stem().is_some_and(|name| {
-                            name.to_string_lossy() == track.track_id.to_string()
-                        })
-                    })
-                })
-                .ok_or(anyhow!("BUG: could not file file for downloaded track"))??
-                .path();
+        let hash = cache::Hash::generate(
+            self.resolver
+                .out()
+                .sources
+                .iter()
+                .find(|x| x.name == track.src)
+                .ok_or(anyhow!("could not find track source"))?,
+            &track.input,
+        );
+        let track_path = self
+            .resolver
+            .out()
+            .cache
+            .find(hash)
+            .ok_or(anyhow!("could not find file for track!"))?;
         let track_fmt = self
             .playlist
-            .find_source(&track.track.src)
+            .find_source(&track.src)
             .unwrap()
             .format
             .clone();
@@ -204,8 +209,8 @@ impl Component for Home {
                         .summary("DMM Player")
                         .body(&format!(
                             "Now Playing: {name}\nby {artist}",
-                            name = track.track.meta.name,
-                            artist = track.track.meta.artist
+                            name = track.meta.name,
+                            artist = track.meta.artist
                         ))
                         .show()?;
                 }
@@ -338,7 +343,6 @@ impl Component for Home {
             .into(),
             "│".fg(Color::Yellow),
             self.playlist.tracks[self.c_track_idx]
-                .track
                 .meta
                 .name
                 .clone()
@@ -379,7 +383,7 @@ impl Component for Home {
         );
         f.render_widget(playlist, info_layout[0]);
 
-        let sel_track = &self.playlist.tracks[self.t_list_state.selected().unwrap()].track;
+        let sel_track = &self.playlist.tracks[self.t_list_state.selected().unwrap()];
         let track = Paragraph::new(vec![
             Line::from(sel_track.meta.name.clone().italic()),
             Line::from(vec!["by: ".bold(), sel_track.meta.artist.clone().into()]),
@@ -449,7 +453,7 @@ impl Component for Home {
                             },
                             i.to_string().into(),
                             ": ".into(),
-                            track.track.meta.name.clone().italic(),
+                            track.meta.name.clone().italic(),
                         ]))
                     })
                     .collect::<Vec<_>>(),
