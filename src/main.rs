@@ -80,6 +80,10 @@ enum Store {
         source: String,
         /// input to that source [string only]
         input: String,
+        /// path to copy the file to (if found)
+        /// the extension of this file will be automatically set
+        #[arg(long, short)]
+        copy_to: Option<PathBuf>,
         /// directory to "run in"
         #[arg(long = "in")]
         run_in: Option<PathBuf>,
@@ -131,6 +135,7 @@ fn main() -> Result<()> {
         Command::Store(Store::Extract {
             source,
             input,
+            copy_to,
             run_in,
         }) => {
             let mut res = Resolver::new(resolve_run_path(run_in)?);
@@ -147,7 +152,12 @@ fn main() -> Result<()> {
                 error!("Could not find the requested download in the store");
                 bail!("query failed");
             };
-            info!("File path is {found:?}");
+            info!("File path is {found:?} (file format: '{}')", source.format);
+            if let Some(path) = copy_to {
+                let path = path.with_extension(&source.format);
+                info!("Copying file to {path:?}");
+                std::fs::copy(found, path)?;
+            }
         }
     }
     Ok(())
