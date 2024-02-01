@@ -134,8 +134,12 @@ Currently no {nixpkgs,AUR,cargo} package exists (coming soon?), so installation 
 
 **IMPORTANT: In all examples using Nix, the URL contains a placeholder, `<version-name>` which must be replaced with one of the following**
 - `stable` - will automatically download the latest stable release
-- a specific version from the releases tab, eg `v0.2.0` <- this is not the actual latest release
-  - **if you choose this method, you need to update the version tag in order to update DMM as well as using `nix flake update` or similar!**
+- `nightly` - will get the latest nightly release
+ - nightly releases will run, but may have bugs / breaking changes / features that break your cache
+- `main` - will download the latest commit
+ - **DO NOT USE**: the `main` branch will often be broken!
+- a specific version from the releases tab, eg `v<x>.<y>.<z>` <- this is not the actual latest release
+  - **not recommended after 1.0.0: if you choose this method, you need to update the version tag in order to update DMM as well as using `nix flake update` or similar!**
 
 ### 1) NixOS (Flake)
 
