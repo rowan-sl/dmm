@@ -52,6 +52,14 @@ enum Command {
     },
     /// Print version information
     Version,
+    /// Management of DMM's download store
+    #[command(subcommand)]
+    Store(Store),
+}
+
+/// Management of DMM's download store
+#[derive(Subcommand, Debug)]
+enum Store {
     /// Garbage collect store
     ///
     /// deletes any downloaded files that are no longer referenced
@@ -63,6 +71,18 @@ enum Command {
         /// find, but do not remove, unreferenced files
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Extract a downloaded file from the store - use this if a download link/primary source disapears
+    ///
+    /// This is playlist-independant - only the source and input must be the same
+    Extract {
+        /// name of the source that this was downloaded from originally
+        source: String,
+        /// input to that source [string only]
+        input: String,
+        /// directory to "run in"
+        #[arg(long = "in")]
+        run_in: Option<PathBuf>,
     },
 }
 
@@ -104,9 +124,30 @@ fn main() -> Result<()> {
         Command::Version => {
             println!("{}", project_meta::version());
         }
-        Command::GC { run_in, dry_run } => {
+        Command::Store(Store::GC { run_in, dry_run }) => {
             log::initialize_logging(None)?;
             gc(run_in, dry_run)?;
+        }
+        Command::Store(Store::Extract {
+            source,
+            input,
+            run_in,
+        }) => {
+            let mut res = Resolver::new(resolve_run_path(run_in)?);
+            res.create_dirs()?;
+            log::initialize_logging(None)?;
+            res.resolve()?;
+            let Some(source) = res.out().sources.iter().find(|s| s.name == source) else {
+                error!("Could not find the source named {source:?}");
+                bail!("query failed");
+            };
+            let hash = cache::Hash::generate(source, &ron::Value::String(input));
+            let Some(found) = res.out().cache.find(hash) else {
+                info!("Calculated hash is {}", hash.to_string());
+                error!("Could not find the requested download in the store");
+                bail!("query failed");
+            };
+            info!("File path is {found:?}");
         }
     }
     Ok(())
