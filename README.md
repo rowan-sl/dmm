@@ -141,6 +141,12 @@ Currently no {nixpkgs,AUR,cargo} package exists (coming soon?), so installation 
 - a specific version from the releases tab, eg `v<x>.<y>.<z>` <- this is not the actual latest release
   - **not recommended after 1.0.0: if you choose this method, you need to update the version tag in order to update DMM as well as using `nix flake update` or similar!**
 
+### 0) From crates.io
+
+**not recommended: if you can install through a real package manager, please do**
+
+DMM is packaged on crates.io, if you have cargo and the requred dependencies installed, run `cargo install dmm`
+
 ### 1) NixOS (Flake)
 
 To install the `dmm` flake, add it to your system configurations `inputs`
