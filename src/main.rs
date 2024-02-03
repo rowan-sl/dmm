@@ -32,14 +32,27 @@ struct Args {
 }
 
 #[derive(Subcommand, Debug)]
+#[command(alias = "dl")]
+enum Download {
+    /// download the given playlist
+    #[command(alias = "pl")]
+    Playlist {
+        /// playlist to download
+        playlist: String,
+    },
+    /// download all playlists
+    All,
+}
+
+#[derive(Subcommand, Debug)]
 enum Command {
     /// Download playlists
     Download {
         /// directory to "run in"
         #[arg(long = "in")]
         run_in: Option<PathBuf>,
-        /// playlist (name) to download
-        playlist: String,
+        #[command(subcommand)]
+        cmd: Download,
     },
     /// Play the given playlist
     Player {
@@ -94,9 +107,19 @@ fn main() -> Result<()> {
     panic::initialize_panic_handler()?;
     let args = Args::parse();
     match args.cmd {
-        Command::Download { run_in, playlist } => {
+        Command::Download {
+            run_in,
+            cmd: Download::Playlist { playlist },
+        } => {
             log::initialize_logging(None)?;
-            download(run_in, playlist)?;
+            download(run_in, Some(playlist))?;
+        }
+        Command::Download {
+            run_in,
+            cmd: Download::All,
+        } => {
+            log::initialize_logging(None)?;
+            download(run_in, None)?;
         }
         Command::Player { playlist, run_in } => {
             let mut res = Resolver::new(resolve_run_path(run_in)?);
@@ -184,40 +207,47 @@ fn resolve_run_path(run_in: Option<PathBuf>) -> Result<PathBuf> {
     })
 }
 
-fn download(run_in: Option<PathBuf>, name: String) -> Result<()> {
+fn download(run_in: Option<PathBuf>, name: Option<String>) -> Result<()> {
     let mut res = Resolver::new(resolve_run_path(run_in)?);
     res.create_dirs()?;
     res.resolve()?;
-    let mut scores = vec![];
-    let matcher = SkimMatcherV2::default().ignore_case();
-    for (i, playlist) in res.out().playlists.iter().enumerate() {
-        if let Some(score) = matcher.fuzzy_match(&playlist.name, &name) {
-            scores.push((score, i));
-        }
-    }
-    if scores.is_empty() {
-        error!("Failed to find matching playlist in input (searched for name: {name:?})");
-        return Ok(());
-    } else {
-        scores.sort_by_key(|score| score.0);
-        let chosen = &res.out().playlists[scores[0].1];
-        info!(
-            "search returned playlist {:?} : {:?}",
-            chosen.name, chosen.file_path
-        );
-        println!("is this correct (cont/abort)? [y/N]:");
-        let Some(next) = io::stdin().lock().lines().next() else {
-            bail!("Failed to get input");
-        };
-        match next?.as_str() {
-            "y" | "Y" => {}
-            _ => {
-                info!("Aborting");
-                return Ok(());
+    if let Some(name) = name {
+        let mut scores = vec![];
+        let matcher = SkimMatcherV2::default().ignore_case();
+        for (i, playlist) in res.out().playlists.iter().enumerate() {
+            if let Some(score) = matcher.fuzzy_match(&playlist.name, &name) {
+                scores.push((score, i));
             }
         }
-        let src = chosen.clone();
-        download_playlist(src, &res.out().cache)?;
+        if scores.is_empty() {
+            error!("Failed to find matching playlist in input (searched for name: {name:?})");
+            return Ok(());
+        } else {
+            scores.sort_by_key(|score| score.0);
+            let chosen = &res.out().playlists[scores[0].1];
+            info!(
+                "search returned playlist {:?} : {:?}",
+                chosen.name, chosen.file_path
+            );
+            println!("is this correct (cont/abort)? [y/N]:");
+            let Some(next) = io::stdin().lock().lines().next() else {
+                bail!("Failed to get input");
+            };
+            match next?.as_str() {
+                "y" | "Y" => {}
+                _ => {
+                    info!("Aborting");
+                    return Ok(());
+                }
+            }
+            let src = chosen.clone();
+            download_playlist(src, &res.out().cache)?;
+        }
+    } else {
+        for playlist in res.out().playlists.iter() {
+            info!("Downloading playlist {}", playlist.name);
+            download_playlist(playlist.clone(), &res.out().cache)?;
+        }
     }
     Ok(())
 }
