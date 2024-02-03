@@ -11,6 +11,7 @@ If any of these things apply to you, you should try DMM!
 
 - [Explainer/Usage](#how-it-works)
 - [Installation](#installation)
+- [Getting Started](#getting-started)
 - [Misc](#misc)
 
 **WARNING: the main branch of DMM can move quickly, and the documentation here may be inacurate.
@@ -21,7 +22,7 @@ and it is recommended to look there instead**
 
 DMM, like Nix, is *declarative*. Using DMM to play music happens in 3 steps
 
-For *general configuration* see [the default config](/assets/dmm.default.ron) and [the example config](/examples/dmm.ron)
+For *general configuration* see [getting started](#getting-started), [the default config](/assets/dmm.default.ron) and [the example config](/examples/dmm.ron)
 
 ### 1) Declare
 
@@ -204,6 +205,41 @@ Dependancies:
 
 If all dependancies are built correctly, `cargo build --release` is all that needs to be done, your binary
 will end up in `target/release/dmm`
+
+## Getting Started
+
+First, you should have `dmm` installed and (optionally, but the example playlist uses it) [`yt-dlp`](https://github.com/yt-dlp/yt-dlp)
+
+This guide (and DMM in general) assumes that you have some experience working with the linux command line,
+If you see any improvements, open an issue/PR!
+
+You should also read [the how it works section](#how-it-works), this will help you understand how to create new playlists and sources yourself.
+
+### Creating a Music Directory
+
+The first step is to decide where to keep your music. You most likely want a directory seperate from the rest of your music (if you have any).
+This guide will assume you are using `~/music`.
+
+After creating the `music` directory, `cd` into it and run `dmm init`.
+This will create the basic layout of the music directory, as well as a playlist named `example`.
+It will also import the [example `yt-dlp` source](/examples/sources/yt-dlp.ron).
+
+### Play the Example Playlist
+
+Before you can play the playlist, you have to fetch the tracks from their sources.
+in `~/music`, run `dmm download playlist 'example'`. the download command will search for that name (it can be incomplete)
+and download that playlists tracks. you can also use `dmm download all` to download all playlists at once.
+
+Now that it is downloaded, you can play it. run `dmm player 'example'` to launch the player.
+
+In the center you can see a list of the tracks in the current playlist.
+You can use `j` and `k` to scroll down this list, and `enter` to play a track.
+
+*All of these keybindings and more are listed on the lower left!*
+
+### Make Your Own!
+
+Take a look at [How It Works](#how-it-works) to see how to create your own playlists, and even sources!
 
 ## Misc
 
