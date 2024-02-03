@@ -16,6 +16,7 @@ use schema::Playlist;
 
 mod cache;
 mod cfg;
+mod init;
 mod log;
 mod panic;
 mod player2;
@@ -68,6 +69,8 @@ enum Command {
     /// Management of DMM's download store
     #[command(subcommand)]
     Store(Store),
+    /// Set up the music directory folder structure in the current directory
+    Init,
 }
 
 /// Management of DMM's download store
@@ -182,6 +185,7 @@ fn main() -> Result<()> {
                 std::fs::copy(found, path)?;
             }
         }
+        Command::Init => init::dmm_init()?,
     }
     Ok(())
 }

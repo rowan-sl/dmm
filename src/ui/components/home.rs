@@ -151,12 +151,11 @@ impl Home {
                 .ok_or(anyhow!("could not find track source"))?,
             &track.input,
         );
-        let track_path = self
-            .resolver
-            .out()
-            .cache
-            .find(hash)
-            .ok_or(anyhow!("could not find file for track!"))?;
+        let track_path = self.resolver.out().cache.find(hash).ok_or_else(|| {
+            error!("Could not find file for track. It is probably not downloaded");
+            info!("Try downloading the playlist with `dmm download`");
+            anyhow!("could not find file for track!")
+        })?;
         let track_fmt = self
             .playlist
             .find_source(&track.src)
