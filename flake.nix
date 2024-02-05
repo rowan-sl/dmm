@@ -32,6 +32,10 @@
           root = ./.;
           fileset = fs.unions [
             ./assets/dmm.default.ron
+            ./assets/gitignore
+            ./assets/dmm.minimal.ron
+            ./examples/sources/yt-dlp.ron
+            ./assets/example-playlist.ron
             (fs.fromSource (craneLib.cleanCargoSource ./.))
           ];
         };
