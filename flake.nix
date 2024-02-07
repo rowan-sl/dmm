@@ -61,7 +61,9 @@
           ] ++ nativeBuildInputs;
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
           shellHook = ''
-          exec zsh
+          if [ -n "$\{EXEC_THIS_SHELL}" ]; then 
+            exec $EXEC_THIS_SHELL
+          fi
           '';
         };
       }
