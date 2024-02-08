@@ -26,9 +26,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(res: Resolver, frame_rate: f64, pl: PlaylistID) -> Result<Self> {
+    pub fn new(res: Resolver, frame_rate: f64) -> Result<Self> {
         let resolver = Arc::new(res);
-        let home = Home::new(pl, resolver.clone())?;
+        let home = Home::new(resolver.clone())?;
         let fps = FpsCounter::default();
         let mode = Mode::Home;
         Ok(Self {

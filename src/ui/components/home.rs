@@ -86,12 +86,7 @@ pub struct Home {
 }
 
 impl Home {
-    pub fn new(pl: PlaylistID, res: Arc<Resolver>) -> Result<Self> {
-        info!(
-            "Loaded playlist {name}",
-            name = res.out().playlists[pl.playlist].name
-        );
-
+    pub fn new(res: Arc<Resolver>) -> Result<Self> {
         debug!("Initializing audio backend");
         let host = cpal::default_host();
         let Some(device) = host.default_output_device().map(Arc::new) else {
@@ -111,7 +106,8 @@ impl Home {
             command_tx: None,
             current: TrackID {
                 track: 0,
-                playlist: pl,
+                // FIXME: proper mechanism for selecting default playlist
+                playlist: PlaylistID { playlist: 0 },
             },
             player,
             sel_method: TrackSelectionMethod::Sequential,

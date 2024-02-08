@@ -57,9 +57,6 @@ enum Command {
     },
     /// Play the given playlist
     Player {
-        /// playlist to play (Name)
-        #[arg()]
-        playlist: String,
         /// directory to "run in"
         #[arg(long = "in")]
         run_in: Option<PathBuf>,
@@ -124,32 +121,12 @@ fn main() -> Result<()> {
             log::initialize_logging(None)?;
             download(run_in, None)?;
         }
-        Command::Player { playlist, run_in } => {
+        Command::Player { run_in } => {
             let mut res = Resolver::new(resolve_run_path(run_in)?);
             res.create_dirs()?;
             log::initialize_logging(Some(res.tmp_file("dmm.log")))?;
             res.resolve()?;
-            let chosen: PlaylistID = {
-                let mut scores = vec![];
-                let matcher = SkimMatcherV2::default().ignore_case();
-                for (i, j) in res.out().playlists.iter().enumerate() {
-                    if let Some(score) = matcher.fuzzy_match(&j.name, &playlist) {
-                        scores.push((score, i));
-                    }
-                }
-                if scores.is_empty() {
-                    println!(
-                        "Failed to find matching playlist in input (searched for name: {playlist:?})"
-                    );
-                    return Ok(());
-                } else {
-                    scores.sort_by_key(|score| score.0);
-                    PlaylistID {
-                        playlist: scores[0].1,
-                    }
-                }
-            };
-            let mut app = ui::app::App::new(res, 15.0, chosen)?;
+            let mut app = ui::app::App::new(res, 15.0)?;
             app.run()?;
         }
         Command::Version => {
