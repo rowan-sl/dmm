@@ -15,6 +15,7 @@ use cpal::{
     traits::{DeviceTrait, StreamTrait},
     Stream, SupportedStreamConfig,
 };
+use derivative::Derivative;
 use flume::Sender;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rb::{RbConsumer, RbProducer, SpscRb, RB};
@@ -268,13 +269,15 @@ pub enum State {
     Stopped = 2,
 }
 
+#[derive(Derivative)]
+#[derivative(Debug)]
 enum PlayTaskCmd {
     Play,
     Pause,
     Stop,
     // start playing (from stopped)
     Start,
-    SetOnTrackComplete(Box<dyn Fn() + Send + Sync + 'static>),
+    SetOnTrackComplete(#[derivative(Debug = "ignore")] Box<dyn Fn() + Send + Sync + 'static>),
     SetNewSource { track_src: File, filetype: String },
 }
 
@@ -320,7 +323,10 @@ impl SingleTrackPlayer {
                             on_track_complete = Some(call);
                             continue 'run;
                         }
-                        Ok(..) => unreachable!(),
+                        Ok(got) => {
+                            error!("player received unexpected command while waiting for playback to start: {got:?}");
+                            unreachable!()
+                        },
                         Err(flume::RecvError::Disconnected) => break 'run,
                     }
                     let mut decoder = outer_decoder.take().unwrap();
@@ -475,7 +481,6 @@ impl SingleTrackPlayer {
     }
 
     pub fn set_track(&mut self, track_src: File, filetype: String) -> Result<()> {
-        self.stop()?;
         self.tx.try_send(PlayTaskCmd::SetNewSource {
             track_src,
             filetype,

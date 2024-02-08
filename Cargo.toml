@@ -51,6 +51,7 @@ const_cmp = "0.0.0"
 highway = "1.1.0"
 base64 = "0.21.5"
 thiserror = "1.0.51"
+derivative = "2.2.0"
 
 [profile.release]
 lto = true

@@ -1,7 +1,13 @@
-use std::{cmp, fs, iter, sync::Arc};
+use std::{cmp, fs, iter, mem::replace, sync::Arc};
 
-use color_eyre::eyre::{anyhow, bail, Result};
-use cpal::traits::{DeviceTrait, HostTrait};
+use color_eyre::{
+    eyre::{anyhow, bail, Result},
+    owo_colors::OwoColorize,
+};
+use cpal::{
+    traits::{DeviceTrait, HostTrait},
+    SupportedStreamConfig,
+};
 use flume::Sender;
 use notify_rust::Notification;
 use rand::Rng;
@@ -68,6 +74,8 @@ pub struct Home {
     current: TrackID,
     // player
     player: SingleTrackPlayer,
+    player_config: Arc<SupportedStreamConfig>,
+    player_device: Arc<cpal::Device>,
     sel_method: TrackSelectionMethod,
     repeat: Repeat,
     /// has a single run-through (on Repeat::Never) been completed
@@ -76,6 +84,8 @@ pub struct Home {
     cfg: Config,
     // track selection list
     t_list_state: ListState,
+    // playlist selection list
+    p_list_state: ListState,
     /// jump to track # when receiving TrackComplete (takes precedence over normal track selection)
     /// used in track selection (set jump_on_track_complete -> stop playback -> trigger Action::TrackComplete -> play jump_on_track_complete)
     jump_on_track_complete: Option<TrackID>,
@@ -90,18 +100,18 @@ impl Home {
 
         debug!("Initializing audio backend");
         let host = cpal::default_host();
-        let Some(device) = host.default_output_device() else {
+        let Some(device) = host.default_output_device().map(Arc::new) else {
             error!("No audio output device exists!");
             bail!("failed to initialize audio backend");
         };
-        let config = match device.default_output_config() {
+        let config = Arc::new(match device.default_output_config() {
             Ok(config) => config,
             Err(err) => {
                 error!("failed to get default audio output device config: {}", err);
                 bail!("failed to initialize audio backend");
             }
-        };
-        let player = SingleTrackPlayer::new(Arc::new(config), Arc::new(device))?;
+        });
+        let player = SingleTrackPlayer::new(config.clone(), device.clone())?;
 
         Ok(Self {
             command_tx: None,
@@ -110,11 +120,14 @@ impl Home {
                 playlist: pl,
             },
             player,
+            player_config: config,
+            player_device: device,
             sel_method: TrackSelectionMethod::Sequential,
             repeat: Repeat::RepeatPlaylist,
             play_complete: false,
             cfg: Config::default(),
             t_list_state: ListState::default().with_selected(Some(0)),
+            p_list_state: ListState::default().with_selected(None),
             jump_on_track_complete: None,
             resolver: res,
         })
@@ -237,7 +250,9 @@ impl Component for Home {
                         ))
                         .show()?;
                 }
-                self.t_list_state.select(Some(self.current.track));
+                if self.t_list_state.selected().is_some() {
+                    self.t_list_state.select(Some(self.current.track));
+                }
                 self.play_c_track()?;
             }
             Action::PausePlay => match self.player.state() {
@@ -266,23 +281,67 @@ impl Component for Home {
                 // will trigger Action::TrackComplete
                 self.player.stop()?;
             }
-            Action::TrackListSelNext => self.t_list_state.select(Some(cmp::min(
-                self.t_list_state.selected().unwrap() + 1,
-                self.get_playlist(self.current.playlist).tracks.len() - 1,
-            ))),
-            Action::TrackListSelPrev => self.t_list_state.select(Some(
-                self.t_list_state.selected().unwrap().saturating_sub(1),
-            )),
-            Action::TrackListPlaySelected => {
-                if self.player.state() == player2::State::Stopped {
-                    self.current.track = self.t_list_state.selected().unwrap();
-                    self.play_c_track()?;
-                } else {
-                    self.jump_on_track_complete = Some(TrackID {
-                        track: self.t_list_state.selected().unwrap(),
-                        playlist: self.current.playlist,
-                    });
-                    self.player.stop()?;
+            Action::ListLeft => {
+                self.t_list_state.select(Some(self.current.track));
+                self.p_list_state.select(None);
+            }
+            Action::ListRight => {
+                self.t_list_state.select(None);
+                self.p_list_state
+                    .select(Some(self.current.playlist.playlist));
+            }
+            Action::ListSelNext => {
+                if self.t_list_state.selected().is_some() {
+                    self.t_list_state.select(Some(cmp::min(
+                        self.t_list_state.selected().unwrap() + 1,
+                        self.get_playlist(self.current.playlist).tracks.len() - 1,
+                    )))
+                } else if self.p_list_state.selected().is_some() {
+                    self.p_list_state.select(Some(cmp::min(
+                        self.p_list_state.selected().unwrap() + 1,
+                        self.resolver.out().playlists.len() - 1,
+                    )))
+                }
+            }
+            Action::ListSelPrev => {
+                if self.t_list_state.selected().is_some() {
+                    self.t_list_state.select(Some(
+                        self.t_list_state.selected().unwrap().saturating_sub(1),
+                    ))
+                } else if self.p_list_state.selected().is_some() {
+                    self.p_list_state.select(Some(
+                        self.p_list_state.selected().unwrap().saturating_sub(1),
+                    ))
+                }
+            }
+            Action::ListChooseSelected => {
+                if self.t_list_state.selected().is_some() {
+                    if self.player.state() == player2::State::Stopped {
+                        self.current.track = self.t_list_state.selected().unwrap();
+                        self.play_c_track()?;
+                    } else {
+                        self.jump_on_track_complete = Some(TrackID {
+                            track: self.t_list_state.selected().unwrap(),
+                            playlist: self.current.playlist,
+                        });
+                        self.player.stop()?;
+                    }
+                } else if self.p_list_state.selected().is_some() {
+                    if self.current.playlist.playlist != self.p_list_state.selected().unwrap() {
+                        if self.player.state() != player2::State::Stopped {
+                            self.jump_on_track_complete = Some(TrackID {
+                                track: 0,
+                                playlist: PlaylistID {
+                                    playlist: self.p_list_state.selected().unwrap(),
+                                },
+                            });
+                            self.player.stop()?;
+                        } else {
+                            self.current.track = 0;
+                            self.current.playlist.playlist = self.p_list_state.selected().unwrap();
+                            self.play_c_track()?;
+                        }
+                    }
                 }
             }
             _ => {}
@@ -386,35 +445,24 @@ impl Component for Home {
             ])
             .split(content_layout[0]);
 
+        let selected_playlist = self.get_playlist(PlaylistID {
+            playlist: self
+                .p_list_state
+                .selected()
+                .unwrap_or(self.current.playlist.playlist),
+        });
         let playlist = Paragraph::new(vec![
-            Line::from(
-                self.get_playlist(self.current.playlist)
-                    .name
-                    .clone()
-                    .italic(),
-            ),
+            Line::from(selected_playlist.name.clone().italic()),
             Line::from(vec![
-                self.get_playlist(self.current.playlist)
-                    .tracks
-                    .len()
-                    .to_string()
-                    .bold(),
+                selected_playlist.tracks.len().to_string().bold(),
                 " track(s)".into(),
             ]),
             Line::from(vec![
-                self.get_playlist(self.current.playlist)
-                    .sources
-                    .len()
-                    .to_string()
-                    .bold(),
+                selected_playlist.sources.len().to_string().bold(),
                 " source(s)".into(),
             ]),
             Line::from(vec![
-                self.get_playlist(self.current.playlist)
-                    .import
-                    .len()
-                    .to_string()
-                    .bold(),
+                selected_playlist.import.len().to_string().bold(),
                 " import(s)".into(),
             ]),
         ])
@@ -426,8 +474,8 @@ impl Component for Home {
         );
         f.render_widget(playlist, info_layout[0]);
 
-        let sel_track =
-            &self.get_playlist(self.current.playlist).tracks[self.t_list_state.selected().unwrap()];
+        let sel_track = &self.get_playlist(self.current.playlist).tracks
+            [self.t_list_state.selected().unwrap_or(self.current.track)];
         let track = Paragraph::new(vec![
             Line::from(sel_track.meta.name.clone().italic()),
             Line::from(vec!["by: ".bold(), sel_track.meta.artist.clone().into()]),
@@ -461,9 +509,11 @@ impl Component for Home {
                     Action::ChangeModeSelection => "toggle shuffle play",
                     Action::ChangeModeRepeat => "toggle repeat",
                     Action::NextTrack => "skip",
-                    Action::TrackListSelNext => "track list: next",
-                    Action::TrackListSelPrev => "track list: prev",
-                    Action::TrackListPlaySelected => "track list: play track",
+                    Action::ListLeft => "select track list",
+                    Action::ListRight => "select playlist list",
+                    Action::ListSelNext => "list: next",
+                    Action::ListSelPrev => "list: prev",
+                    Action::ListChooseSelected => "list: play track/select playlist",
                     other => panic!("Unexpected binding to key {other:?} (bound to {keys:?})"),
                 };
                 output
@@ -480,6 +530,10 @@ impl Component for Home {
             .wrap(Wrap { trim: false });
         f.render_widget(track, info_layout[2]);
 
+        let lists_layout = Layout::new()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(content_layout[1]);
         f.render_stateful_widget(
             List::new(
                 self.get_playlist(self.current.playlist)
@@ -515,9 +569,43 @@ impl Component for Home {
                     .borders(Borders::ALL),
             )
             .highlight_symbol(">")
+            .highlight_spacing(HighlightSpacing::Always)
             .highlight_style(Style::new().fg(Color::LightCyan)),
-            content_layout[1],
+            lists_layout[0],
             &mut self.t_list_state,
+        );
+
+        f.render_stateful_widget(
+            List::new(
+                self.resolver
+                    .out()
+                    .playlists
+                    .iter()
+                    .enumerate()
+                    .map(|(i, pl)| {
+                        let is_now_playing = i == self.current.playlist.playlist;
+                        let item = if self.p_list_state.selected().is_some_and(|x| x == i) {
+                            ListItem::new(Line::from(vec!["> ".into(), pl.name.clone().into()]))
+                        } else {
+                            ListItem::new(Line::from(vec!["- ".into(), pl.name.clone().into()]))
+                        };
+                        if is_now_playing {
+                            item.light_green()
+                        } else {
+                            item
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .block(
+                Block::new()
+                    .title("Playlist Selection".bold())
+                    .border_style(Style::new().fg(Color::Yellow))
+                    .borders(Borders::ALL),
+            )
+            .highlight_style(Style::new().fg(Color::LightCyan)),
+            lists_layout[1],
+            &mut self.p_list_state,
         );
 
         Ok(())

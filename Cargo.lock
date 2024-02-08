@@ -809,6 +809,7 @@ dependencies = [
  "const_cmp",
  "cpal",
  "crossterm",
+ "derivative",
  "derive_deref",
  "flume",
  "fuzzy-matcher",
