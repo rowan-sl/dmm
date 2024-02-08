@@ -137,6 +137,7 @@ Currently no {nixpkgs,AUR,cargo} package exists (coming soon?), so installation 
 - `stable` - will automatically download the latest stable release
 - `nightly` - will get the latest nightly release
  - nightly releases will run, but may have bugs / breaking changes / features that break your cache
+ - nightly releases *will not* have an associated git tag/release
 - `main` - will download the latest commit
  - **DO NOT USE**: the `main` branch will often be broken!
 - a specific version from the releases tab, eg `v<x>.<y>.<z>` <- this is not the actual latest release
