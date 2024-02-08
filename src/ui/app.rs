@@ -6,11 +6,7 @@ use ratatui::prelude::Rect;
 
 use super::{
     action::Action,
-    components::{
-        fps::FpsCounter,
-        home::{Home, PlaylistID},
-        Component,
-    },
+    components::{fps::FpsCounter, home::Home, Component},
     mode::Mode,
     tui,
 };
