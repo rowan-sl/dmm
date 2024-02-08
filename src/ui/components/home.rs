@@ -70,8 +70,10 @@ pub struct Home {
     player: SingleTrackPlayer,
     sel_method: TrackSelectionMethod,
     repeat: Repeat,
-    /// has a single run-through (on Repeat::Never) been completed
-    play_complete: bool,
+    /// weather or not to play the next track when this one is done
+    /// disabled when the end of the playlist is reached on Repeat::Never
+    /// enabled when a track is selected or play/pause is pressed
+    autoplay: bool,
     // config
     cfg: Config,
     // track selection list
@@ -114,7 +116,7 @@ impl Home {
             player,
             sel_method: TrackSelectionMethod::Sequential,
             repeat: Repeat::RepeatPlaylist,
-            play_complete: false,
+            autoplay: true,
             cfg: Config::default(),
             t_list_state: ListState::default().with_selected(Some(0)),
             p_list_state: ListState::default().with_selected(None),
@@ -146,8 +148,8 @@ impl Home {
                 } else {
                     match rep {
                         Repeat::Never => {
+                            self.autoplay = false;
                             self.player.stop()?;
-                            self.play_complete = true;
                             let _handle = Notification::new()
                                 .summary("DMM Player")
                                 .body("Playlist Complete - Stopping")
@@ -165,9 +167,6 @@ impl Home {
     }
 
     fn play_c_track(&mut self) -> Result<()> {
-        if self.play_complete {
-            return Ok(());
-        }
         let track = self.get_track(self.current);
         let hash = cache::Hash::generate(
             self.resolver
@@ -240,27 +239,24 @@ impl Component for Home {
                         ))
                         .show()?;
                 }
-                if self.t_list_state.selected().is_some() {
-                    self.t_list_state.select(Some(self.current.track));
+                if self.autoplay {
+                    self.play_c_track()?;
                 }
-                self.play_c_track()?;
             }
-            Action::PausePlay => match self.player.state() {
-                player2::State::Playing => self.player.pause()?,
-                player2::State::Paused => self.player.play()?,
-                player2::State::Stopped => {
-                    if self.play_complete {
-                        self.play_complete = false;
+            Action::PausePlay => {
+                self.autoplay = true;
+                match self.player.state() {
+                    player2::State::Playing => self.player.pause()?,
+                    player2::State::Paused => self.player.play()?,
+                    player2::State::Stopped => {
                         match self.sel_method {
                             TrackSelectionMethod::Random => self.select_next_track()?,
                             TrackSelectionMethod::Sequential => self.current.track = 0,
                         }
-                    } else {
-                        // first play of the playlist
                         self.play_c_track()?;
                     }
                 }
-            },
+            }
             Action::ChangeModeSelection => {
                 self.sel_method.next();
             }
@@ -306,6 +302,7 @@ impl Component for Home {
             }
             Action::ListChooseSelected => {
                 if self.t_list_state.selected().is_some() {
+                    self.autoplay = true;
                     if self.player.state() == player2::State::Stopped {
                         self.current.track = self.t_list_state.selected().unwrap();
                         self.play_c_track()?;
@@ -331,6 +328,8 @@ impl Component for Home {
                             self.current.playlist.playlist = self.p_list_state.selected().unwrap();
                             self.play_c_track()?;
                         }
+                        self.p_list_state.select(None);
+                        self.t_list_state.select(Some(0));
                     }
                 }
             }
