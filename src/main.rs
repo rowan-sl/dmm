@@ -13,6 +13,7 @@ use color_eyre::eyre::{anyhow, bail, Result};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use resolver::Resolver;
 use schema::Playlist;
+use ui::components::home::PlaylistID;
 
 mod cache;
 mod cfg;
@@ -129,7 +130,7 @@ fn main() -> Result<()> {
             res.create_dirs()?;
             log::initialize_logging(Some(res.tmp_file("dmm.log")))?;
             res.resolve()?;
-            let chosen: Playlist = {
+            let chosen: PlaylistID = {
                 let mut scores = vec![];
                 let matcher = SkimMatcherV2::default().ignore_case();
                 for (i, j) in res.out().playlists.iter().enumerate() {
@@ -144,8 +145,9 @@ fn main() -> Result<()> {
                     return Ok(());
                 } else {
                     scores.sort_by_key(|score| score.0);
-                    let chosen = &res.out().playlists[scores[0].1];
-                    chosen.clone()
+                    PlaylistID {
+                        playlist: scores[0].1,
+                    }
                 }
             };
             let mut app = ui::app::App::new(res, 15.0, chosen)?;

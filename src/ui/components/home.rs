@@ -13,7 +13,7 @@ use crate::{
     cfg::{self, Config},
     player2::{self, SingleTrackPlayer},
     resolver::Resolver,
-    schema::Playlist,
+    schema::{Playlist, Track},
     ui::{action::Action, mode::Mode, symbol},
 };
 
@@ -49,11 +49,23 @@ impl Repeat {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct TrackID {
+    pub track: usize,
+    pub playlist: PlaylistID,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct PlaylistID {
+    pub playlist: usize,
+}
+
 pub struct Home {
     command_tx: Option<Sender<Action>>,
-    // info bar
-    c_track_idx: usize,
-    playlist: Playlist,
+    // resolver
+    resolver: Arc<Resolver>,
+    // playing state
+    current: TrackID,
     // player
     player: SingleTrackPlayer,
     sel_method: TrackSelectionMethod,
@@ -65,14 +77,16 @@ pub struct Home {
     // track selection list
     t_list_state: ListState,
     /// jump to track # when receiving TrackComplete (takes precedence over normal track selection)
-    jump_on_track_complete: Option<usize>,
-    // resolver
-    resolver: Arc<Resolver>,
+    /// used in track selection (set jump_on_track_complete -> stop playback -> trigger Action::TrackComplete -> play jump_on_track_complete)
+    jump_on_track_complete: Option<TrackID>,
 }
 
 impl Home {
-    pub fn new(pl: Playlist, res: Arc<Resolver>) -> Result<Self> {
-        info!("Loaded playlist {name}", name = pl.name);
+    pub fn new(pl: PlaylistID, res: Arc<Resolver>) -> Result<Self> {
+        info!(
+            "Loaded playlist {name}",
+            name = res.out().playlists[pl.playlist].name
+        );
 
         debug!("Initializing audio backend");
         let host = cpal::default_host();
@@ -91,8 +105,10 @@ impl Home {
 
         Ok(Self {
             command_tx: None,
-            c_track_idx: 0,
-            playlist: pl,
+            current: TrackID {
+                track: 0,
+                playlist: pl,
+            },
             player,
             sel_method: TrackSelectionMethod::Sequential,
             repeat: Repeat::RepeatPlaylist,
@@ -104,6 +120,13 @@ impl Home {
         })
     }
 
+    fn get_track(&self, track: TrackID) -> &Track {
+        &self.get_playlist(track.playlist).tracks[track.track]
+    }
+    fn get_playlist(&self, playlist: PlaylistID) -> &Playlist {
+        &self.resolver.out().playlists[playlist.playlist]
+    }
+
     fn select_next_track(&mut self) -> Result<()> {
         match (self.repeat, self.sel_method) {
             (
@@ -111,11 +134,12 @@ impl Home {
                 TrackSelectionMethod::Random | TrackSelectionMethod::Sequential,
             ) => { /* no-op: select current track */ }
             (Repeat::Never | Repeat::RepeatPlaylist, TrackSelectionMethod::Random) => {
-                self.c_track_idx = rand::thread_rng().gen_range(0..self.playlist.tracks.len());
+                self.current.track = rand::thread_rng()
+                    .gen_range(0..self.get_playlist(self.current.playlist).tracks.len());
             }
             (rep, TrackSelectionMethod::Sequential) => {
-                if self.c_track_idx != self.playlist.tracks.len() - 1 {
-                    self.c_track_idx += 1;
+                if self.current.track != self.get_playlist(self.current.playlist).tracks.len() - 1 {
+                    self.current.track += 1;
                 } else {
                     match rep {
                         Repeat::Never => {
@@ -127,7 +151,7 @@ impl Home {
                                 .show()?;
                         }
                         Repeat::RepeatPlaylist => {
-                            self.c_track_idx = 0;
+                            self.current.track = 0;
                         }
                         Repeat::RepeatTrack => unreachable!(),
                     }
@@ -141,7 +165,7 @@ impl Home {
         if self.play_complete {
             return Ok(());
         }
-        let track = self.playlist.tracks.get(self.c_track_idx).unwrap();
+        let track = self.get_track(self.current);
         let hash = cache::Hash::generate(
             self.resolver
                 .out()
@@ -157,7 +181,7 @@ impl Home {
             anyhow!("could not find file for track!")
         })?;
         let track_fmt = self
-            .playlist
+            .get_playlist(self.current.playlist)
             .find_source(&track.src)
             .unwrap()
             .format
@@ -199,11 +223,11 @@ impl Component for Home {
                 assert_eq!(self.player.state(), player2::State::Stopped);
                 trace!("Playing next track");
                 if let Some(idx) = self.jump_on_track_complete.take() {
-                    self.c_track_idx = idx;
+                    self.current = idx;
                     // do not send notifications about playing a track by selection (the person using the app did this, they don't need to know)
                 } else {
                     self.select_next_track()?;
-                    let track = &self.playlist.tracks[self.c_track_idx];
+                    let track = self.get_track(self.current);
                     let _handle = Notification::new()
                         .summary("DMM Player")
                         .body(&format!(
@@ -213,7 +237,7 @@ impl Component for Home {
                         ))
                         .show()?;
                 }
-                self.t_list_state.select(Some(self.c_track_idx));
+                self.t_list_state.select(Some(self.current.track));
                 self.play_c_track()?;
             }
             Action::PausePlay => match self.player.state() {
@@ -224,7 +248,7 @@ impl Component for Home {
                         self.play_complete = false;
                         match self.sel_method {
                             TrackSelectionMethod::Random => self.select_next_track()?,
-                            TrackSelectionMethod::Sequential => self.c_track_idx = 0,
+                            TrackSelectionMethod::Sequential => self.current.track = 0,
                         }
                     } else {
                         // first play of the playlist
@@ -244,17 +268,20 @@ impl Component for Home {
             }
             Action::TrackListSelNext => self.t_list_state.select(Some(cmp::min(
                 self.t_list_state.selected().unwrap() + 1,
-                self.playlist.tracks.len() - 1,
+                self.get_playlist(self.current.playlist).tracks.len() - 1,
             ))),
             Action::TrackListSelPrev => self.t_list_state.select(Some(
                 self.t_list_state.selected().unwrap().saturating_sub(1),
             )),
             Action::TrackListPlaySelected => {
                 if self.player.state() == player2::State::Stopped {
-                    self.c_track_idx = self.t_list_state.selected().unwrap();
+                    self.current.track = self.t_list_state.selected().unwrap();
                     self.play_c_track()?;
                 } else {
-                    self.jump_on_track_complete = Some(self.t_list_state.selected().unwrap());
+                    self.jump_on_track_complete = Some(TrackID {
+                        track: self.t_list_state.selected().unwrap(),
+                        playlist: self.current.playlist,
+                    });
                     self.player.stop()?;
                 }
             }
@@ -336,16 +363,12 @@ impl Component for Home {
             "│".fg(Color::Yellow),
             format!(
                 "# {n}/{num}",
-                n = self.c_track_idx + 1,
-                num = self.playlist.tracks.len(),
+                n = self.current.track + 1,
+                num = self.get_playlist(self.current.playlist).tracks.len(),
             )
             .into(),
             "│".fg(Color::Yellow),
-            self.playlist.tracks[self.c_track_idx]
-                .meta
-                .name
-                .clone()
-                .italic(),
+            self.get_track(self.current).meta.name.clone().italic(),
         ]))
         .fg(Color::Gray);
         f.render_widget(titlebar_content, titlebar_content_area);
@@ -364,14 +387,35 @@ impl Component for Home {
             .split(content_layout[0]);
 
         let playlist = Paragraph::new(vec![
-            Line::from(self.playlist.name.clone().italic()),
+            Line::from(
+                self.get_playlist(self.current.playlist)
+                    .name
+                    .clone()
+                    .italic(),
+            ),
             Line::from(vec![
-                self.playlist.tracks.len().to_string().bold(),
+                self.get_playlist(self.current.playlist)
+                    .tracks
+                    .len()
+                    .to_string()
+                    .bold(),
                 " track(s)".into(),
             ]),
             Line::from(vec![
-                self.playlist.sources.len().to_string().bold(),
+                self.get_playlist(self.current.playlist)
+                    .sources
+                    .len()
+                    .to_string()
+                    .bold(),
                 " source(s)".into(),
+            ]),
+            Line::from(vec![
+                self.get_playlist(self.current.playlist)
+                    .import
+                    .len()
+                    .to_string()
+                    .bold(),
+                " import(s)".into(),
             ]),
         ])
         .block(
@@ -382,7 +426,8 @@ impl Component for Home {
         );
         f.render_widget(playlist, info_layout[0]);
 
-        let sel_track = &self.playlist.tracks[self.t_list_state.selected().unwrap()];
+        let sel_track =
+            &self.get_playlist(self.current.playlist).tracks[self.t_list_state.selected().unwrap()];
         let track = Paragraph::new(vec![
             Line::from(sel_track.meta.name.clone().italic()),
             Line::from(vec!["by: ".bold(), sel_track.meta.artist.clone().into()]),
@@ -437,7 +482,7 @@ impl Component for Home {
 
         f.render_stateful_widget(
             List::new(
-                self.playlist
+                self.get_playlist(self.current.playlist)
                     .tracks
                     .iter()
                     .enumerate()

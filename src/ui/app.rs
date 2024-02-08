@@ -6,7 +6,11 @@ use ratatui::prelude::Rect;
 
 use super::{
     action::Action,
-    components::{fps::FpsCounter, home::Home, Component},
+    components::{
+        fps::FpsCounter,
+        home::{Home, PlaylistID},
+        Component,
+    },
     mode::Mode,
     tui,
 };
@@ -22,9 +26,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(res: Resolver, frame_rate: f64, pl: Playlist) -> Result<Self> {
+    pub fn new(res: Resolver, frame_rate: f64, pl: PlaylistID) -> Result<Self> {
         let resolver = Arc::new(res);
-        let home = Home::new(pl.clone(), resolver.clone())?;
+        let home = Home::new(pl, resolver.clone())?;
         let fps = FpsCounter::default();
         let mode = Mode::Home;
         Ok(Self {
