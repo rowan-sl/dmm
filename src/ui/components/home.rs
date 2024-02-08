@@ -219,23 +219,23 @@ impl Component for Home {
             Action::TrackComplete => {
                 trace!("Received Track Complete");
                 assert_eq!(self.player.state(), player2::State::Stopped);
-                trace!("Playing next track");
-                if let Some(idx) = self.jump_on_track_complete.take() {
-                    self.current = idx;
-                    // do not send notifications about playing a track by selection (the person using the app did this, they don't need to know)
-                } else {
-                    self.select_next_track()?;
-                    let track = self.get_track(self.current);
-                    let _handle = Notification::new()
-                        .summary("DMM Player")
-                        .body(&format!(
-                            "Now Playing: {name}\nby {artist}",
-                            name = track.meta.name,
-                            artist = track.meta.artist
-                        ))
-                        .show()?;
-                }
                 if self.autoplay {
+                    trace!("Playing next track");
+                    if let Some(idx) = self.jump_on_track_complete.take() {
+                        self.current = idx;
+                        // do not send notifications about playing a track by selection (the person using the app did this, they don't need to know)
+                    } else {
+                        self.select_next_track()?;
+                        let track = self.get_track(self.current);
+                        let _handle = Notification::new()
+                            .summary("DMM Player")
+                            .body(&format!(
+                                "Now Playing: {name}\nby {artist}",
+                                name = track.meta.name,
+                                artist = track.meta.artist
+                            ))
+                            .show()?;
+                    }
                     self.play_c_track()?;
                 }
             }
