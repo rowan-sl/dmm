@@ -487,8 +487,9 @@ impl Component for Home {
                     .iter()
                     .enumerate()
                     .map(|(i, track)| {
+                        let is_now_playing = i == self.current.track;
                         let i = i + 1;
-                        ListItem::new(Line::from(vec![
+                        let item = ListItem::new(Line::from(vec![
                             {
                                 let fmt = i.to_string();
                                 let n_zeroes = 3usize.saturating_sub(fmt.len());
@@ -498,7 +499,12 @@ impl Component for Home {
                             i.to_string().into(),
                             ": ".into(),
                             track.meta.name.clone().italic(),
-                        ]))
+                        ]));
+                        if is_now_playing {
+                            item.light_green()
+                        } else {
+                            item
+                        }
                     })
                     .collect::<Vec<_>>(),
             )
@@ -509,7 +515,7 @@ impl Component for Home {
                     .borders(Borders::ALL),
             )
             .highlight_symbol(">")
-            .highlight_style(Style::new().fg(Color::LightGreen)),
+            .highlight_style(Style::new().fg(Color::LightCyan)),
             content_layout[1],
             &mut self.t_list_state,
         );
