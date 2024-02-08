@@ -315,19 +315,12 @@ impl Component for Home {
                     }
                 } else if self.p_list_state.selected().is_some() {
                     if self.current.playlist.playlist != self.p_list_state.selected().unwrap() {
+                        self.autoplay = false;
                         if self.player.state() != player2::State::Stopped {
-                            self.jump_on_track_complete = Some(TrackID {
-                                track: 0,
-                                playlist: PlaylistID {
-                                    playlist: self.p_list_state.selected().unwrap(),
-                                },
-                            });
                             self.player.stop()?;
-                        } else {
-                            self.current.track = 0;
-                            self.current.playlist.playlist = self.p_list_state.selected().unwrap();
-                            self.play_c_track()?;
                         }
+                        self.current.track = 0;
+                        self.current.playlist.playlist = self.p_list_state.selected().unwrap();
                         self.p_list_state.select(None);
                         self.t_list_state.select(Some(0));
                     }
