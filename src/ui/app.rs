@@ -14,7 +14,7 @@ use super::{
     mode::Mode,
     tui,
 };
-use crate::{resolver::Resolver, schema::Playlist};
+use crate::resolver::Resolver;
 
 pub struct App {
     pub frame_rate: f64,

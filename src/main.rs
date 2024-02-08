@@ -12,7 +12,6 @@ use clap::{Parser, Subcommand};
 use color_eyre::eyre::{anyhow, bail, Result};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use resolver::Resolver;
-use schema::Playlist;
 use ui::components::home::PlaylistID;
 
 mod cache;

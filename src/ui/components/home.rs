@@ -1,13 +1,7 @@
-use std::{cmp, fs, iter, mem::replace, sync::Arc};
+use std::{cmp, fs, iter, sync::Arc};
 
-use color_eyre::{
-    eyre::{anyhow, bail, Result},
-    owo_colors::OwoColorize,
-};
-use cpal::{
-    traits::{DeviceTrait, HostTrait},
-    SupportedStreamConfig,
-};
+use color_eyre::eyre::{anyhow, bail, Result};
+use cpal::traits::{DeviceTrait, HostTrait};
 use flume::Sender;
 use notify_rust::Notification;
 use rand::Rng;
@@ -74,8 +68,6 @@ pub struct Home {
     current: TrackID,
     // player
     player: SingleTrackPlayer,
-    player_config: Arc<SupportedStreamConfig>,
-    player_device: Arc<cpal::Device>,
     sel_method: TrackSelectionMethod,
     repeat: Repeat,
     /// has a single run-through (on Repeat::Never) been completed
@@ -120,8 +112,6 @@ impl Home {
                 playlist: pl,
             },
             player,
-            player_config: config,
-            player_device: device,
             sel_method: TrackSelectionMethod::Sequential,
             repeat: Repeat::RepeatPlaylist,
             play_complete: false,
