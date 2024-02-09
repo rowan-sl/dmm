@@ -78,11 +78,19 @@ This functionality is currently extremely simple, with a few limitations that wi
 To download the playlist `Classic Christmas Songs`, navigate to the root of the music directory and run the command
 
 ```zsh
-dmm download "Christmas Songs"
+dmm download playlist "Christmas Songs"
 ```
 
 the third parameter, (here "Christmas Songs") is used to search all playlist in the `playlists/` directory for ones with similar names.
 it can be a part of, or similar to the playlist name (the program will ask you to check the playlist it chose was correct before continuing)
+
+You can also use the command
+
+```zsh
+dmm download all
+```
+
+To download all playlists in the `playlists/` directory
 
 #### 2.1) Updating the Cache
 
@@ -100,11 +108,10 @@ To clean the cache (delete all audio not *currently referenced*), run `dmm gc`
 Time to listen to your ~hard earned~ music! Navigate to your music directory, and run the following command
 
 ```zsh
-dmm player "Christmas Songs"
+dmm player
 ```
 
-The `player` command uses the same scheme as `download` to find the playlist that you give the name of, see that section for
-details on how to specify the name of your playlist.
+This opens the player UI, where you can select the playlist and tracks you want to play
 
 And remember piracy, especially from music publishers, is a victimless crime!
 
@@ -125,13 +132,15 @@ On the left:
 
 On the right:
 - Track selection: lists track # and title.
- - use the keybindings shown on the left of the screen to navigate!
+- Playlist selection: lists playlist name.
+- (by default) they keybindings `j` and `k` are used to navigate up and down, `h` and `l` are used to change between 
+  track and playlist selection, and `<return>` is used to select the highlighted entry.
 
 ## Installation
 
 **DMM is built on, and for, linux.** It may work on windows, but you will need to build from source
 
-Currently no {nixpkgs,AUR,cargo} package exists (coming soon?), so installation is only supported through nix flakes.
+Currently no {nixpkgs,AUR} package exists (coming soon?), so installation is only supported through nix flakes, or crates.io.
 
 **IMPORTANT: In all examples using Nix, the URL contains a placeholder, `<version-name>` which must be replaced with one of the following**
 - `stable` - will automatically download the latest stable release
@@ -231,10 +240,12 @@ Before you can play the playlist, you have to fetch the tracks from their source
 in `~/music`, run `dmm download playlist 'example'`. the download command will search for that name (it can be incomplete)
 and download that playlists tracks. you can also use `dmm download all` to download all playlists at once.
 
-Now that it is downloaded, you can play it. run `dmm player 'example'` to launch the player.
+Now that it is downloaded, you can play it. run `dmm player` to launch the player.
 
 In the center you can see a list of the tracks in the current playlist.
 You can use `j` and `k` to scroll down this list, and `enter` to play a track.
+
+also see [the UI guide](#31-music-player-ui) for more details.
 
 *All of these keybindings and more are listed on the lower left!*
 
