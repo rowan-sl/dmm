@@ -22,13 +22,11 @@ and it is recommended to look there instead**
 
 DMM, like Nix, is *declarative*. Using DMM to play music happens in 3 steps
 
-For *general configuration* see [getting started](#getting-started), [the default config](/assets/dmm.default.ron) and [the example config](/examples/dmm.ron)
+For *general configuration* see [getting started](#getting-started), the default config: `/assets/dmm.default.ron` and the example config: `/examples/dmm.ron`
 
 ### 1) Declare
 
 The first step is to define the music that you want to listen to in a config file.
-
-DMM Configuration is organized as follows (examples can be found [here](/examples/))
 
 Music Directory: the 'root' directory where DMM's files live. In this there are 3 items
 - `dmm.ron`: This is the main configuration. Here you can create custom keybindings, and change settings
@@ -54,7 +52,7 @@ A music player is good, but useless without a way to *get* the music to play. (*
 Here, DMM provides a rather open-ended solution, implemented through sources. Currently only one exists, which is the `Shell` source.
 This source runs a shell command to fetch the audio, allowing for integration with many external programs such as [`yt-dlp`](https://github.com/yt-dlp/yt-dlp).
 
-Here is an example of using the [example yt-dlp source](/examples/sources/yt-dlp.ron) to download
+Here is an example of using the example yt-dlp source: `/examples/sources/yt-dlp.ron` to download
 the song Let It Snow from the link <youtube.com/watch?v=2TA3IKH8Y5c>
 
 ```ron
@@ -232,7 +230,7 @@ This guide will assume you are using `~/music`.
 
 After creating the `music` directory, `cd` into it and run `dmm init`.
 This will create the basic layout of the music directory, as well as a playlist named `example`.
-It will also import the [example `yt-dlp` source](/examples/sources/yt-dlp.ron).
+It will also import the example `yt-dlp` source (`/examples/sources/yt-dlp.ron`).
 
 ### Play the Example Playlist
 
