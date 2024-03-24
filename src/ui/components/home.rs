@@ -7,7 +7,7 @@ use notify_rust::Notification;
 use rand::Rng;
 use ratatui::{prelude::*, widgets::*};
 
-use super::{Component, Frame};
+use super::Component;
 use crate::{
     cache,
     cfg::Config,

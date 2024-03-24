@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use color_eyre::eyre::Result;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
-    self, fmt::writer::BoxMakeWriter, prelude::__tracing_subscriber_SubscriberExt,
+    fmt::writer::BoxMakeWriter, prelude::__tracing_subscriber_SubscriberExt,
     util::SubscriberInitExt, Layer,
 };
 

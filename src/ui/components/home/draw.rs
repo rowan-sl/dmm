@@ -3,7 +3,7 @@ use std::iter;
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
 
-use super::{Frame, PlaylistID, Repeat, TrackSelectionMethod};
+use super::{PlaylistID, Repeat, TrackSelectionMethod};
 use crate::{
     cfg,
     player2::{self},
