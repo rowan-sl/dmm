@@ -91,14 +91,15 @@ impl super::Home {
     }
 
     fn draw_info(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let info_layout = Layout::new()
-            .direction(Direction::Vertical)
-            .constraints([
+        let info_layout = Layout::new(
+            Direction::Vertical,
+            [
                 Constraint::Length(6),
                 Constraint::Max(6),
                 Constraint::Min(0),
-            ])
-            .split(area);
+            ],
+        )
+        .split(area);
 
         let selected_playlist = self.get_playlist(PlaylistID {
             playlist: self
@@ -188,24 +189,27 @@ impl super::Home {
     }
 
     pub(super) fn draw_inner(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let main_layout = Layout::new()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)])
-            .horizontal_margin(1)
-            .split(area);
+        let main_layout = Layout::new(
+            Direction::Vertical,
+            [Constraint::Length(3), Constraint::Min(0)],
+        )
+        .horizontal_margin(1)
+        .split(area);
         self.draw_titlebar(f, main_layout[0])?;
 
-        let content_layout = Layout::new()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Max(37), Constraint::Min(0)])
-            .split(main_layout[1]);
+        let content_layout = Layout::new(
+            Direction::Horizontal,
+            [Constraint::Max(37), Constraint::Min(0)],
+        )
+        .split(main_layout[1]);
 
         self.draw_info(f, content_layout[0])?;
 
-        let lists_layout = Layout::new()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(content_layout[1]);
+        let lists_layout = Layout::new(
+            Direction::Horizontal,
+            [Constraint::Percentage(50), Constraint::Percentage(50)],
+        )
+        .split(content_layout[1]);
         f.render_stateful_widget(
             List::new(
                 self.get_playlist(self.current.playlist)
