@@ -126,6 +126,7 @@ impl Home {
     fn get_track(&self, track: TrackID) -> &Track {
         &self.get_playlist(track.playlist).tracks[track.track]
     }
+
     fn get_playlist(&self, playlist: PlaylistID) -> &Playlist {
         &self.resolver.out().playlists[playlist.playlist]
     }
