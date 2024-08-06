@@ -1,8 +1,8 @@
 [package]
 name = "dmm"
-version = "0.6.1"
+version = "1.0.0"
 edition = "2021"
-authors = [ "Rowan S-L <r@fawkes.io>" ]
+authors = [ "mtnash <contact@fawkes.io>" ]
 description = "The Declarative Music Manager"
 #TODO: make webpage for the DMM docs?
 homepage = "https://git.fawkes.io/mtnash/dmm"
