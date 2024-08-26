@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
-use ratatui::prelude::Rect;
+use ratatui::{layout::Size, prelude::Rect};
 
 use super::{
     action::Action,
@@ -52,7 +52,13 @@ impl App {
         }
 
         for component in self.components.iter_mut() {
-            component.init(tui.size()?)?;
+            let Size { width, height } = tui.size()?;
+            component.init(Rect {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            })?;
         }
 
         loop {
@@ -99,7 +105,7 @@ impl App {
                         let mut errors = vec![];
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
-                                if let Err(e) = component.draw(f, f.size()) {
+                                if let Err(e) = component.draw(f, f.area()) {
                                     errors.push(e);
                                 }
                             }
@@ -112,7 +118,7 @@ impl App {
                         let mut errors = vec![];
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
-                                if let Err(e) = component.draw(f, f.size()) {
+                                if let Err(e) = component.draw(f, f.area()) {
                                     errors.push(e);
                                 }
                             }

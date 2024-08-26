@@ -29,7 +29,7 @@ notify-rust = "4.11"
 symphonia = { version = "0.5", features = ["mp3"] }
 cpal = "0.15"
 rb = "0.4"
-ratatui = { version = "0.26", features = ["serde", "macros"] }
+ratatui = { version = "0.28", features = ["serde", "macros"] }
 flume = "0.11"
 fuzzy-matcher = "0.3"
 tracing = "0.1"
@@ -40,7 +40,7 @@ color-eyre = "0.6"
 log = "0.4"
 better-panic = "0.3"
 strip-ansi-escapes = "0.2"
-human-panic = "1.2"
+human-panic = "2.0"
 crossterm = { version = "0.27", features = ["serde"] }
 config = "0.14"
 derive_deref = "1"
